@@ -135,10 +135,9 @@ async def cmd_price(message: Message) -> None:
         price_service = get_price_service()
         symbols = ", ".join(price_service.get_supported_symbols()[:15])
         await message.answer(
-            f"Usage: `/price <symbol>`\n"
-            f"Example: `/price btc`\n\n"
+            f"Usage: <code>/price btc</code>\n\n"
             f"Supported: {symbols}...",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
@@ -168,7 +167,7 @@ async def cmd_price(message: Message) -> None:
         amd_str = f"\nAMD: {price.formatted_amd}"
 
     result_text = (
-        f"💰 **{price.name}** ({price.symbol.upper()})\n\n"
+        f"💰 <b>{price.name}</b> ({price.symbol.upper()})\n\n"
         f"USD: {price.formatted_usd}{amd_str}{change_str}"
     )
 
@@ -177,7 +176,7 @@ async def cmd_price(message: Message) -> None:
     history = get_history_store()
     history.add_entry(user_id, f"price {symbol}", price.formatted_usd, "price")
 
-    await message.answer(result_text, parse_mode="Markdown")
+    await message.answer(result_text, parse_mode="HTML")
 
 
 @router.message(Command("convert", "conv", "c"))
@@ -203,24 +202,21 @@ async def cmd_convert(message: Message) -> None:
     if len(parts) < 4:
         settings = get_settings()
         await message.answer(
-            "Usage: `/convert <amount> <from> <to>`\n\n"
-            "**Examples:**\n"
-            "• `/convert 100 usd amd`\n"
-            "• `/convert 100 usdt amd`\n"
-            "• `/convert 100 amd usdt`\n"
-            "• `/convert 100 usdt sberbank rub`\n"
-            "• `/convert 100 usdt tinkoff rub`\n\n"
-            f"**RUB methods:** sberbank, tinkoff, alfa, vtb\n"
-            f"Default RUB method: {settings.default_rub_method}\n\n"
-            "Use `/rates usdt` to see available targets.",
-            parse_mode="Markdown",
+            "Usage: <code>/convert 100 usd amd</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/convert 100 usdt amd</code>\n"
+            "• <code>/convert 100 amd usdt</code>\n"
+            "• <code>/convert 100 usdt sberbank rub</code>\n\n"
+            f"<b>RUB methods:</b> sberbank, tinkoff, alfa, vtb\n"
+            f"Default: {settings.default_rub_method}",
+            parse_mode="HTML",
         )
         return
 
     amount, from_curr, to_curr, method = parse_convert_args(parts)
 
     if amount is None:
-        await message.answer("Invalid amount.", parse_mode="Markdown")
+        await message.answer("Invalid amount.", parse_mode="HTML")
         return
 
     if amount <= 0:
@@ -263,10 +259,10 @@ async def cmd_convert(message: Message) -> None:
                 amount_str = f"{amount:,.2f}"
 
             result_text = (
-                f"💱 **Currency Conversion**\n\n"
+                f"💱 <b>Currency Conversion</b>\n\n"
                 f"{amount_str} {from_curr} → {result_str} {to_display}\n\n"
                 f"Rate: 1 {from_curr} = {rate_quote.rate:.4f} {to_display}\n"
-                f"_Source: exchanger rates_"
+                f"<i>Source: exchanger rates</i>"
             )
 
             history.add_entry(
@@ -276,7 +272,7 @@ async def cmd_convert(message: Message) -> None:
                 "convert",
             )
 
-            await message.answer(result_text, parse_mode="Markdown")
+            await message.answer(result_text, parse_mode="HTML")
             return
 
     # Fallback to fx_service
@@ -289,22 +285,22 @@ async def cmd_convert(message: Message) -> None:
             await message.answer(
                 f"Could not convert {from_curr} to {to_curr}.\n\n"
                 f"For RUB, try specifying a method:\n"
-                f"`/convert {amount} {from_curr} sberbank rub`",
-                parse_mode="Markdown",
+                f"<code>/convert {amount} {from_curr} sberbank rub</code>",
+                parse_mode="HTML",
             )
         else:
             await message.answer(
                 f"Could not convert {from_curr} to {to_curr}.\n"
-                f"Check currency codes and try again.\n"
-                f"Use `/rates {from_curr.lower()}` to see available targets."
+                f"Check currency codes and try again.",
+                parse_mode="HTML",
             )
         return
 
     result_text = (
-        f"💱 **Currency Conversion**\n\n"
+        f"💱 <b>Currency Conversion</b>\n\n"
         f"{result.formatted}\n\n"
         f"Rate: 1 {from_curr} = {result.rate:.4f} {to_curr}\n"
-        f"_Source: public FX rates_"
+        f"<i>Source: public FX rates</i>"
     )
 
     history.add_entry(
@@ -314,7 +310,7 @@ async def cmd_convert(message: Message) -> None:
         "convert",
     )
 
-    await message.answer(result_text, parse_mode="Markdown")
+    await message.answer(result_text, parse_mode="HTML")
 
 
 @router.message(Command("rates", "pairs"))
@@ -356,17 +352,16 @@ async def cmd_rates(message: Message) -> None:
             if target not in from_currencies[d.from_code]:
                 from_currencies[d.from_code].append(target)
 
-        lines = ["📊 **Available Exchange Rates**\n"]
+        lines = ["📊 <b>Available Exchange Rates</b>\n"]
         for from_c, targets in sorted(from_currencies.items()):
             targets_str = ", ".join(sorted(targets)[:5])
             if len(targets) > 5:
                 targets_str += f"... (+{len(targets) - 5})"
-            lines.append(f"**{from_c}** → {targets_str}")
+            lines.append(f"<b>{from_c}</b> → {targets_str}")
 
-        lines.append("\n_Use `/rates <currency>` for details_")
-        lines.append("_Some pairs use exchanger XML rates_")
+        lines.append("\n<i>Some pairs use exchanger XML rates</i>")
 
-        await message.answer("\n".join(lines), parse_mode="Markdown")
+        await message.answer("\n".join(lines), parse_mode="HTML")
         return
 
     # Show rates for specific currency
@@ -382,11 +377,11 @@ async def cmd_rates(message: Message) -> None:
             await message.answer(f"No rates found for method '{method}'.")
             return
 
-        lines = [f"📊 **Rates for {method.title()}**\n"]
+        lines = [f"📊 <b>Rates for {method.title()}</b>\n"]
         for d in matching:
-            lines.append(f"{d.from_code} → {d.display_to}: **{d.rate:.4f}**")
+            lines.append(f"{d.from_code} → {d.display_to}: <b>{d.rate:.4f}</b>")
 
-        await message.answer("\n".join(lines), parse_mode="Markdown")
+        await message.answer("\n".join(lines), parse_mode="HTML")
         return
 
     # Query as source currency
@@ -396,30 +391,30 @@ async def cmd_rates(message: Message) -> None:
         # Try as target
         directions = await xml_service.list_directions(filter_to=filter_code)
         if directions:
-            lines = [f"📊 **Rates to {filter_code}**\n"]
+            lines = [f"📊 <b>Rates to {filter_code}</b>\n"]
             for d in directions:
                 method_str = f" ({d.method})" if d.method else ""
-                lines.append(f"{d.from_code} → {d.display_to}: **{d.rate:.4f}**{method_str}")
-            await message.answer("\n".join(lines), parse_mode="Markdown")
+                lines.append(f"{d.from_code} → {d.display_to}: <b>{d.rate:.4f}</b>{method_str}")
+            await message.answer("\n".join(lines), parse_mode="HTML")
             return
 
         await message.answer(
-            f"No rates found for '{filter_code}'.\n"
-            f"Use `/rates` to see available currencies."
+            f"No rates found for '{filter_code}'.",
+            parse_mode="HTML",
         )
         return
 
-    lines = [f"📊 **Rates from {filter_code}**\n"]
+    lines = [f"📊 <b>Rates from {filter_code}</b>\n"]
     for d in directions:
         method_str = f" ({d.method})" if d.method else ""
         min_max = ""
         if d.min_amount and d.max_amount:
             min_max = f" [{d.min_amount}-{d.max_amount}]"
-        lines.append(f"→ {d.display_to}: **{d.rate:.4f}**{method_str}{min_max}")
+        lines.append(f"→ {d.display_to}: <b>{d.rate:.4f}</b>{method_str}{min_max}")
 
-    lines.append("\n_Use `/convert <amount> <from> <to>` to convert_")
+    lines.append("\n<i>Use /convert to convert</i>")
 
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("unit", "u"))
@@ -438,10 +433,10 @@ async def cmd_unit(message: Message) -> None:
     if len(parts) < 4:
         unit_service = get_unit_service()
         categories = unit_service.get_supported_units()
-        help_lines = ["Usage: `/unit <amount> <from> <to>`", "Example: `/unit 10 km miles`", ""]
+        help_lines = ["Usage: <code>/unit 10 km miles</code>", ""]
         for cat, units in list(categories.items())[:4]:
-            help_lines.append(f"**{cat.title()}**: {', '.join(units[:6])}")
-        await message.answer("\n".join(help_lines), parse_mode="Markdown")
+            help_lines.append(f"<b>{cat.title()}</b>: {', '.join(units[:6])}")
+        await message.answer("\n".join(help_lines), parse_mode="HTML")
         return
 
     amount = parse_float(parts[1])
@@ -449,7 +444,7 @@ async def cmd_unit(message: Message) -> None:
     to_unit = parts[3].lower()
 
     if amount is None:
-        await message.answer("Invalid amount.", parse_mode="Markdown")
+        await message.answer("Invalid amount.", parse_mode="HTML")
         return
 
     unit_service = get_unit_service()
@@ -458,13 +453,14 @@ async def cmd_unit(message: Message) -> None:
     if result is None:
         await message.answer(
             f"Cannot convert '{from_unit}' to '{to_unit}'.\n"
-            f"Check unit names. Use `/unit` to see supported units."
+            f"Check unit names.",
+            parse_mode="HTML",
         )
         return
 
     result_text = (
-        f"📐 **Unit Conversion** ({result.category})\n\n"
-        f"**{result.formatted}**"
+        f"📐 <b>Unit Conversion</b> ({result.category})\n\n"
+        f"<b>{result.formatted}</b>"
     )
 
     # Save to history
@@ -477,4 +473,4 @@ async def cmd_unit(message: Message) -> None:
         "unit",
     )
 
-    await message.answer(result_text, parse_mode="Markdown")
+    await message.answer(result_text, parse_mode="HTML")
