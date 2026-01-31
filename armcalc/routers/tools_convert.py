@@ -256,12 +256,11 @@ async def cmd_convert(message: Message) -> None:
             else:
                 amount_str = f"{amount:,.2f}"
 
-            # Clean 4-line output format
+            # Clean 3-line output format
             result_text = (
                 f"💱 <b>Conversion</b>\n\n"
                 f"{amount_str} {from_display} → {result_str} {to_display}\n"
-                f"Rate: 1 {from_display} = {rate_quote.rate:.4f} {to_display}\n"
-                f"<i>Source: exswaping XML</i>"
+                f"Rate: 1 {from_display} = {rate_quote.rate:.4f} {to_display}"
             )
 
             history.add_entry(
@@ -296,10 +295,9 @@ async def cmd_convert(message: Message) -> None:
         return
 
     result_text = (
-        f"💱 <b>Currency Conversion</b>\n\n"
-        f"{result.formatted}\n\n"
-        f"Rate: 1 {from_curr} = {result.rate:.4f} {to_curr}\n"
-        f"<i>Source: public FX rates</i>"
+        f"💱 <b>Conversion</b>\n\n"
+        f"{result.formatted}\n"
+        f"Rate: 1 {from_curr} = {result.rate:.4f} {to_curr}"
     )
 
     history.add_entry(
@@ -312,105 +310,37 @@ async def cmd_convert(message: Message) -> None:
     await message.answer(result_text, parse_mode="HTML")
 
 
-@router.message(Command("rates", "pairs"))
+@router.message(Command("rates"))
 async def cmd_rates(message: Message) -> None:
     """
-    Show available exchange rates from XML.
-
-    Usage:
-    - /rates - show all directions
-    - /rates usdt - show targets for USDT
-    - /rates rub - show RUB methods
+    Show main exchange rates (USDT, AMD, RUB).
     """
     if not message.text:
         return
 
-    parts = message.text.split()
     xml_service = get_xml_service()
 
     # Send typing indicator
     await message.bot.send_chat_action(message.chat.id, "typing")
 
-    if len(parts) < 2:
-        # Show summary
-        directions = await xml_service.list_directions()
+    lines = ["📊 <b>Exchange Rates</b>\n"]
 
-        if not directions:
-            await message.answer(
-                "No exchange rates available.\n"
-                "The exchanger XML may be temporarily unavailable."
-            )
-            return
+    # Get USDT -> AMD
+    rate = await xml_service.get_rate("USDT", "AMD")
+    if rate:
+        lines.append(f"USDT → AMD: <b>{rate.rate:.2f}</b>")
 
-        # Group by from currency
-        from_currencies = {}
-        for d in directions:
-            if d.from_code not in from_currencies:
-                from_currencies[d.from_code] = []
-            target = d.display_to
-            if target not in from_currencies[d.from_code]:
-                from_currencies[d.from_code].append(target)
+    # Get AMD -> USDT
+    rate = await xml_service.get_rate("AMD", "USDT")
+    if rate:
+        lines.append(f"AMD → USDT: <b>{rate.rate:.6f}</b>")
 
-        lines = ["📊 <b>Available Exchange Rates</b>\n"]
-        for from_c, targets in sorted(from_currencies.items()):
-            targets_str = ", ".join(sorted(targets)[:5])
-            if len(targets) > 5:
-                targets_str += f"... (+{len(targets) - 5})"
-            lines.append(f"<b>{from_c}</b> → {targets_str}")
+    lines.append("")
 
-        lines.append("\n<i>Some pairs use exchanger XML rates</i>")
-
-        await message.answer("\n".join(lines), parse_mode="HTML")
-        return
-
-    # Show rates for specific currency
-    filter_code = parts[1].upper()
-
-    # Check if it's a method query
-    if filter_code.lower() in RUB_METHOD_ALIASES:
-        method = RUB_METHOD_ALIASES[filter_code.lower()]
-        directions = await xml_service.list_directions()
-        matching = [d for d in directions if d.method == method]
-
-        if not matching:
-            await message.answer(f"No rates found for method '{method}'.")
-            return
-
-        lines = [f"📊 <b>Rates for {method.title()}</b>\n"]
-        for d in matching:
-            lines.append(f"{d.from_code} → {d.display_to}: <b>{d.rate:.4f}</b>")
-
-        await message.answer("\n".join(lines), parse_mode="HTML")
-        return
-
-    # Query as source currency
-    directions = await xml_service.list_directions(filter_from=filter_code)
-
-    if not directions:
-        # Try as target
-        directions = await xml_service.list_directions(filter_to=filter_code)
-        if directions:
-            lines = [f"📊 <b>Rates to {filter_code}</b>\n"]
-            for d in directions:
-                method_str = f" ({d.method})" if d.method else ""
-                lines.append(f"{d.from_code} → {d.display_to}: <b>{d.rate:.4f}</b>{method_str}")
-            await message.answer("\n".join(lines), parse_mode="HTML")
-            return
-
-        await message.answer(
-            f"No rates found for '{filter_code}'.",
-            parse_mode="HTML",
-        )
-        return
-
-    lines = [f"📊 <b>Rates from {filter_code}</b>\n"]
-    for d in directions:
-        method_str = f" ({d.method})" if d.method else ""
-        min_max = ""
-        if d.min_amount and d.max_amount:
-            min_max = f" [{d.min_amount}-{d.max_amount}]"
-        lines.append(f"→ {d.display_to}: <b>{d.rate:.4f}</b>{method_str}{min_max}")
-
-    lines.append("\n<i>Use /convert to convert</i>")
+    # Get RUB methods
+    for method in ["sberbank", "tinkoff"]:
+        rate = await xml_service.get_rate("USDT", "RUB", method)
+        if rate:
+            lines.append(f"USDT → RUB ({method.title()}): <b>{rate.rate:.2f}</b>")
 
     await message.answer("\n".join(lines), parse_mode="HTML")

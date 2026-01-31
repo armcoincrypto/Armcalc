@@ -6,7 +6,6 @@ from .start import router as start_router
 from .help import router as help_router
 from .calc import router as calc_router
 from .inline import router as inline_router
-from .tools_finance import router as finance_router
 from .tools_convert import router as convert_router
 from .debug import router as debug_router
 
@@ -18,7 +17,6 @@ def get_all_routers() -> list[Router]:
         help_router,
         calc_router,
         inline_router,
-        finance_router,
         convert_router,
         debug_router,
     ]
@@ -30,7 +28,6 @@ __all__ = [
     "help_router",
     "calc_router",
     "inline_router",
-    "finance_router",
     "convert_router",
     "debug_router",
 ]
