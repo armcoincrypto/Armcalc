@@ -70,8 +70,6 @@ Some pairs (AMD↔USDT, USD↔USDT, RUB) use exchanger XML rates.
 
 💵 **Financial Tools**
 
-• `/tip 5000 15` - Calculate 15% tip on 5000
-• `/split 15000 4` - Split 15000 among 4 people
 • `/loan 1000000 12 24` - Monthly payment for 1M loan at 12% for 24 months
 • `/days 2024-01-01 2024-12-31` - Days between dates
 

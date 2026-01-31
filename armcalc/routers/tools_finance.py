@@ -1,4 +1,4 @@
-"""Financial tools: tip, loan, split, days."""
+"""Financial tools: loan, days."""
 
 from datetime import datetime
 from aiogram import Router
@@ -26,105 +26,6 @@ def parse_int(value: str) -> int | None:
         return int(value.replace(",", "").strip())
     except (ValueError, AttributeError):
         return None
-
-
-@router.message(Command("tip"))
-async def cmd_tip(message: Message) -> None:
-    """
-    Calculate tip.
-
-    Usage: /tip <amount> <percent>
-    Example: /tip 5000 15
-    """
-    if not message.text:
-        return
-
-    parts = message.text.split()
-
-    if len(parts) != 3:
-        await message.answer(
-            "Usage: `/tip <amount> <percent>`\n"
-            "Example: `/tip 5000 15`",
-            parse_mode="Markdown",
-        )
-        return
-
-    amount = parse_float(parts[1])
-    percent = parse_float(parts[2])
-
-    if amount is None or percent is None:
-        await message.answer("Invalid numbers. Usage: `/tip 5000 15`", parse_mode="Markdown")
-        return
-
-    if amount <= 0 or percent < 0:
-        await message.answer("Amount must be positive, percent must be non-negative.")
-        return
-
-    tip = amount * percent / 100
-    total = amount + tip
-
-    result_text = (
-        f"💰 **Tip Calculator**\n\n"
-        f"Amount: {amount:,.2f}\n"
-        f"Tip ({percent}%): {tip:,.2f}\n"
-        f"**Total: {total:,.2f}**"
-    )
-
-    # Save to history
-    user_id = message.from_user.id if message.from_user else 0
-    history = get_history_store()
-    history.add_entry(user_id, f"tip {amount} {percent}%", f"{total:,.2f}", "tip")
-
-    await message.answer(result_text, parse_mode="Markdown")
-
-
-@router.message(Command("split"))
-async def cmd_split(message: Message) -> None:
-    """
-    Split bill among people.
-
-    Usage: /split <amount> <people>
-    Example: /split 15000 4
-    """
-    if not message.text:
-        return
-
-    parts = message.text.split()
-
-    if len(parts) != 3:
-        await message.answer(
-            "Usage: `/split <amount> <people>`\n"
-            "Example: `/split 15000 4`",
-            parse_mode="Markdown",
-        )
-        return
-
-    amount = parse_float(parts[1])
-    people = parse_int(parts[2])
-
-    if amount is None or people is None:
-        await message.answer("Invalid numbers. Usage: `/split 15000 4`", parse_mode="Markdown")
-        return
-
-    if amount <= 0 or people <= 0:
-        await message.answer("Amount and people must be positive.")
-        return
-
-    per_person = amount / people
-
-    result_text = (
-        f"👥 **Split Bill**\n\n"
-        f"Total: {amount:,.2f}\n"
-        f"People: {people}\n"
-        f"**Each pays: {per_person:,.2f}**"
-    )
-
-    # Save to history
-    user_id = message.from_user.id if message.from_user else 0
-    history = get_history_store()
-    history.add_entry(user_id, f"split {amount} / {people}", f"{per_person:,.2f}", "split")
-
-    await message.answer(result_text, parse_mode="Markdown")
 
 
 @router.message(Command("loan"))
