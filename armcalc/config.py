@@ -52,6 +52,24 @@ class Settings(BaseSettings):
     # History
     history_limit: int = Field(default=10, description="Max history entries to show")
 
+    # Exswaping XML service
+    exswaping_xml_url: str = Field(
+        default="https://exswaping.com/currencies.xml",
+        description="URL for exchange rates XML"
+    )
+    exswaping_xml_ttl_sec: int = Field(
+        default=120,
+        description="XML cache TTL in seconds"
+    )
+    default_rub_method: str = Field(
+        default="sberbank",
+        description="Default RUB payment method"
+    )
+    exswaping_fixture_path: str = Field(
+        default="tests/fixtures/currencies.xml",
+        description="Path to fixture XML for DRY_RUN mode"
+    )
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -78,12 +96,15 @@ class Settings(BaseSettings):
         """Return non-sensitive config info for /debug command."""
         import sys
         return {
-            "version": "2.0.0",
+            "version": "2.1.0",
             "python_version": sys.version.split()[0],
             "mode": "DRY_RUN" if self.dry_run else "LIVE",
             "log_level": self.log_level,
             "price_cache_ttl_sec": self.price_cache_ttl_sec,
             "fx_cache_ttl_sec": self.fx_cache_ttl_sec,
+            "exswaping_xml_ttl_sec": self.exswaping_xml_ttl_sec,
+            "exswaping_xml_url": self.exswaping_xml_url,
+            "default_rub_method": self.default_rub_method,
             "request_timeout_sec": self.request_timeout_sec,
             "history_db_path": self.history_db_path,
             "timezone": self.timezone,

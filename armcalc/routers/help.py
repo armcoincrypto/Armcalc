@@ -53,10 +53,18 @@ Supported: btc, eth, sol, bnb, xrp, ada, doge, ltc, link, etc.
 
 💱 **Currency Conversion**
 • `/convert 100 usd amd`
-• `/convert 1000 amd eur`
-• `/convert 50 eur rub`
-Supported: USD, EUR, AMD, RUB, GBP, TRY, GEL, AED, etc.
-Note: USDT = USD (stablecoin parity)
+• `/convert 100 usdt amd` ← exchanger rates!
+• `/convert 100 amd usdt`
+• `/convert 100 usdt sberbank rub`
+• `/convert 100 usdt tinkoff rub`
+
+**RUB methods:** sberbank, tinkoff, alfa, vtb
+Some pairs (AMD↔USDT, USD↔USDT, RUB) use exchanger XML rates.
+
+📊 **Exchange Rates**
+• `/rates` - all available directions
+• `/rates usdt` - USDT targets
+• `/rates sberbank` - Sberbank rates
 
 📐 **Unit Conversion**
 • `/unit 10 km miles`

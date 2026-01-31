@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rates>
+  <!-- AMD <-> USDT -->
+  <item>
+    <from>USDT</from>
+    <to>AMD</to>
+    <in>1</in>
+    <out>402.50</out>
+    <fromname>Tether USDT</fromname>
+    <toname>Armenian Dram</toname>
+    <minamount>10</minamount>
+    <maxamount>50000</maxamount>
+  </item>
+  <item>
+    <from>AMD</from>
+    <to>USDT</to>
+    <in>405</in>
+    <out>1</out>
+    <fromname>Armenian Dram</fromname>
+    <toname>Tether USDT</toname>
+    <minamount>5000</minamount>
+    <maxamount>20000000</maxamount>
+  </item>
+
+  <!-- USD <-> USDT -->
+  <item>
+    <from>USD</from>
+    <to>USDT</to>
+    <in>1</in>
+    <out>0.998</out>
+    <fromname>US Dollar Cash</fromname>
+    <toname>Tether USDT</toname>
+  </item>
+  <item>
+    <from>USDT</from>
+    <to>USD</to>
+    <in>1</in>
+    <out>0.995</out>
+    <fromname>Tether USDT</fromname>
+    <toname>US Dollar Cash</toname>
+  </item>
+
+  <!-- USDT -> RUB (Sberbank) -->
+  <item>
+    <from>USDT</from>
+    <to>SBERRUB</to>
+    <in>1</in>
+    <out>96.50</out>
+    <fromname>Tether USDT</fromname>
+    <toname>Sberbank RUB</toname>
+    <method>sberbank</method>
+    <minamount>50</minamount>
+    <maxamount>100000</maxamount>
+  </item>
+
+  <!-- USDT -> RUB (Tinkoff) -->
+  <item>
+    <from>USDT</from>
+    <to>TCSBRUB</to>
+    <in>1</in>
+    <out>96.00</out>
+    <fromname>Tether USDT</fromname>
+    <toname>Tinkoff RUB</toname>
+    <method>tinkoff</method>
+    <minamount>50</minamount>
+    <maxamount>100000</maxamount>
+  </item>
+
+  <!-- USDT -> RUB (Alfabank) -->
+  <item>
+    <from>USDT</from>
+    <to>ACRUB</to>
+    <in>1</in>
+    <out>95.80</out>
+    <fromname>Tether USDT</fromname>
+    <toname>Alfabank RUB</toname>
+    <method>alfabank</method>
+  </item>
+
+  <!-- RUB (Sberbank) -> USDT -->
+  <item>
+    <from>SBERRUB</from>
+    <to>USDT</to>
+    <in>98</in>
+    <out>1</out>
+    <fromname>Sberbank RUB</fromname>
+    <toname>Tether USDT</toname>
+    <method>sberbank</method>
+  </item>
+
+  <!-- USDT -> EUR -->
+  <item>
+    <from>USDT</from>
+    <to>EUR</to>
+    <in>1</in>
+    <out>0.92</out>
+    <fromname>Tether USDT</fromname>
+    <toname>Euro</toname>
+  </item>
+</rates>
