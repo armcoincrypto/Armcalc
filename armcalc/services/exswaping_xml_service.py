@@ -91,16 +91,30 @@ class ExchangeDirection:
 class RateQuote:
     """A rate quote for conversion."""
 
-    from_code: str
-    to_code: str
+    from_code: str  # XML code (e.g., USDTTRC20)
+    to_code: str  # XML code (e.g., CASHAMD)
     rate: Decimal
     method: Optional[str] = None
     source: str = "xml"  # "xml" or "fallback"
     timestamp: float = 0.0
+    from_display: str = ""  # User-friendly name
+    to_display: str = ""  # User-friendly name
 
     def convert(self, amount: Decimal) -> Decimal:
         """Convert amount using this rate."""
         return (amount * self.rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @property
+    def display_from(self) -> str:
+        """Get display name for source."""
+        return self.from_display or self.from_code
+
+    @property
+    def display_to(self) -> str:
+        """Get display name for target."""
+        if self.method:
+            return f"RUB ({self.method.title()})"
+        return self.to_display or self.to_code
 
 
 @dataclass
@@ -138,6 +152,25 @@ METHOD_TO_CODE: Dict[str, str] = {
     "raiffeisen": "RFRUB",
     "qiwi": "QWRUB",
     "yoomoney": "YAMRUB",
+}
+
+# User-friendly code to XML unit mapping
+# Users can type "usdt" and we map to the default network
+CODE_ALIASES: Dict[str, List[str]] = {
+    # USDT variants
+    "USDT": ["USDTTRC20", "USDTBEP20", "USDTERC20", "USDT"],
+    "USDTTRC20": ["USDTTRC20"],
+    "USDTBEP20": ["USDTBEP20"],
+    "USDTERC20": ["USDTERC20"],
+    # AMD variants
+    "AMD": ["CASHAMD", "CARDAMD", "AMD"],
+    "CASHAMD": ["CASHAMD"],
+    "CARDAMD": ["CARDAMD"],
+    # USD variants
+    "USD": ["CASHUSD", "USD"],
+    "CASHUSD": ["CASHUSD"],
+    # RUB - handled via METHOD_TO_CODE
+    "RUB": ["SBERRUB", "TCSBRUB", "ACRUB", "VTBRUB", "RUB"],
 }
 
 
@@ -446,6 +479,61 @@ class ExswapingXmlService:
             return None
         return RUB_METHOD_ALIASES.get(method.lower().strip())
 
+    def normalize_code(self, code: str) -> str:
+        """
+        Normalize user-friendly code to XML unit.
+
+        Maps: usdt -> USDTTRC20, amd -> CASHAMD, etc.
+        """
+        upper = code.upper().strip()
+        settings = self._settings
+
+        # Direct match - already normalized
+        if upper in ("USDTTRC20", "USDTBEP20", "CASHAMD", "CARDAMD", "CASHUSD"):
+            return upper
+
+        # Map common names to default units
+        if upper == "USDT":
+            return settings.default_usdt_unit
+        if upper == "AMD":
+            return settings.default_amd_unit
+        if upper == "USD":
+            return settings.default_usd_unit
+
+        return upper
+
+    def get_display_name(self, xml_code: str, method: Optional[str] = None) -> str:
+        """Get user-friendly display name for an XML code."""
+        upper = xml_code.upper()
+
+        # Handle RUB methods
+        if method:
+            return f"RUB ({method.title()})"
+        if upper.endswith("RUB") and len(upper) > 3:
+            for m, code in METHOD_TO_CODE.items():
+                if upper == code:
+                    return f"RUB ({m.title()})"
+            return "RUB"
+
+        # Handle USDT variants
+        if upper.startswith("USDT"):
+            network = upper[4:] if len(upper) > 4 else ""
+            if network:
+                return f"USDT ({network})"
+            return "USDT"
+
+        # Handle AMD variants
+        if upper.endswith("AMD") and len(upper) > 3:
+            variant = upper[:-3]  # CASH, CARD, etc.
+            return f"AMD ({variant.title()})"
+
+        # Handle USD variants
+        if upper.endswith("USD") and len(upper) > 3:
+            variant = upper[:-3]
+            return f"USD ({variant.title()})"
+
+        return upper
+
     async def get_rate(
         self,
         from_code: str,
@@ -455,9 +543,12 @@ class ExswapingXmlService:
         """
         Get exchange rate for a currency pair.
 
+        Supports user-friendly codes like "usdt", "amd" which are
+        normalized to XML codes like "USDTTRC20", "CASHAMD".
+
         Args:
-            from_code: Source currency (e.g., "USDT", "AMD")
-            to_code: Target currency (e.g., "AMD", "RUB")
+            from_code: Source currency (e.g., "USDT", "AMD", "usdttrc20")
+            to_code: Target currency (e.g., "AMD", "RUB", "cashamd")
             method: Optional payment method for RUB (e.g., "sberbank")
 
         Returns:
@@ -465,80 +556,56 @@ class ExswapingXmlService:
         """
         await self.ensure_cache()
 
-        from_upper = from_code.upper().strip()
-        to_upper = to_code.upper().strip()
+        # Normalize codes
+        from_norm = self.normalize_code(from_code)
+        to_norm = self.normalize_code(to_code)
         norm_method = self.normalize_method(method)
 
-        # If to is RUB and method specified, look up with method
-        if to_upper == "RUB" and norm_method:
-            # Try method-specific lookup
-            key = (from_upper, "RUB", norm_method)
-            if key in self._direction_index:
-                d = self._direction_index[key]
-                return RateQuote(
-                    from_code=from_upper,
-                    to_code=f"RUB",
-                    rate=d.rate,
-                    method=norm_method,
-                    source="xml",
-                    timestamp=time.time(),
-                )
+        # Get all possible variants to try
+        from_variants = CODE_ALIASES.get(from_code.upper(), [from_norm])
+        to_variants = CODE_ALIASES.get(to_code.upper(), [to_norm])
 
-            # Try method code directly (e.g., SBERRUB)
-            method_code = METHOD_TO_CODE.get(norm_method, "").upper()
+        # If to is RUB and method specified, handle specially
+        if to_code.upper() == "RUB" and norm_method:
+            method_code = METHOD_TO_CODE.get(norm_method, "")
             if method_code:
-                key = (from_upper, method_code, norm_method)
+                to_variants = [method_code]
+
+        # Try all combinations of from/to variants
+        for from_var in from_variants:
+            for to_var in to_variants:
+                # Try with method
+                key = (from_var, to_var, norm_method)
                 if key in self._direction_index:
                     d = self._direction_index[key]
                     return RateQuote(
-                        from_code=from_upper,
-                        to_code="RUB",
-                        rate=d.rate,
-                        method=norm_method,
-                        source="xml",
-                        timestamp=time.time(),
-                    )
-                # Try without method in key
-                key = (from_upper, method_code, None)
-                if key in self._direction_index:
-                    d = self._direction_index[key]
-                    return RateQuote(
-                        from_code=from_upper,
-                        to_code="RUB",
+                        from_code=from_var,
+                        to_code=to_var,
                         rate=d.rate,
                         method=d.method or norm_method,
                         source="xml",
                         timestamp=time.time(),
+                        from_display=self.get_display_name(from_var),
+                        to_display=self.get_display_name(to_var, d.method or norm_method),
                     )
 
-        # Try exact match
-        key = (from_upper, to_upper, norm_method)
-        if key in self._direction_index:
-            d = self._direction_index[key]
-            return RateQuote(
-                from_code=from_upper,
-                to_code=to_upper,
-                rate=d.rate,
-                method=d.method,
-                source="xml",
-                timestamp=time.time(),
-            )
-
-        # Try without method
-        key = (from_upper, to_upper, None)
-        if key in self._direction_index:
-            d = self._direction_index[key]
-            return RateQuote(
-                from_code=from_upper,
-                to_code=to_upper,
-                rate=d.rate,
-                method=d.method,
-                source="xml",
-                timestamp=time.time(),
-            )
+                # Try without method
+                key = (from_var, to_var, None)
+                if key in self._direction_index:
+                    d = self._direction_index[key]
+                    return RateQuote(
+                        from_code=from_var,
+                        to_code=to_var,
+                        rate=d.rate,
+                        method=d.method,
+                        source="xml",
+                        timestamp=time.time(),
+                        from_display=self.get_display_name(from_var),
+                        to_display=self.get_display_name(to_var, d.method),
+                    )
 
         # If to is RUB without method, try default method
-        if to_upper == "RUB" and not norm_method:
+        if to_code.upper() == "RUB" and not norm_method:
             default_method = self._settings.default_rub_method
             return await self.get_rate(from_code, to_code, default_method)
 

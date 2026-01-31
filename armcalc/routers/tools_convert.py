@@ -238,35 +238,35 @@ async def cmd_convert(message: Message) -> None:
 
         if rate_quote:
             result_amount = rate_quote.convert(amount)
-            used_method = rate_quote.method
 
-            # Format output
-            if used_method:
-                to_display = f"RUB ({used_method.title()})"
-            else:
-                to_display = to_curr
+            # Get display names
+            from_display = rate_quote.display_from
+            to_display = rate_quote.display_to
 
-            # Format amounts
-            if to_curr in ("AMD", "RUB") or (to_curr == "RUB" and used_method):
+            # Format amounts (no decimals for AMD/RUB)
+            to_code_upper = rate_quote.to_code.upper()
+            if "AMD" in to_code_upper or "RUB" in to_code_upper:
                 result_str = f"{result_amount:,.0f}"
             else:
                 result_str = f"{result_amount:,.2f}"
 
-            if from_curr in ("AMD", "RUB"):
+            from_code_upper = rate_quote.from_code.upper()
+            if "AMD" in from_code_upper or "RUB" in from_code_upper:
                 amount_str = f"{amount:,.0f}"
             else:
                 amount_str = f"{amount:,.2f}"
 
+            # Clean 4-line output format
             result_text = (
-                f"💱 <b>Currency Conversion</b>\n\n"
-                f"{amount_str} {from_curr} → {result_str} {to_display}\n\n"
-                f"Rate: 1 {from_curr} = {rate_quote.rate:.4f} {to_display}\n"
-                f"<i>Source: exchanger rates</i>"
+                f"💱 <b>Conversion</b>\n\n"
+                f"{amount_str} {from_display} → {result_str} {to_display}\n"
+                f"Rate: 1 {from_display} = {rate_quote.rate:.4f} {to_display}\n"
+                f"<i>Source: exswaping XML</i>"
             )
 
             history.add_entry(
                 user_id,
-                f"{amount} {from_curr} -> {to_display}",
+                f"{amount} {from_display} -> {to_display}",
                 f"{result_str} {to_display}",
                 "convert",
             )

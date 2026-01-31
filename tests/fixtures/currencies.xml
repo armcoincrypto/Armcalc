@@ -1,100 +1,110 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rates>
-  <!-- AMD <-> USDT -->
+  <!-- USDT TRC20 <-> AMD Cash -->
   <item>
-    <from>USDT</from>
-    <to>AMD</to>
+    <from>USDTTRC20</from>
+    <to>CASHAMD</to>
     <in>1</in>
-    <out>402.50</out>
-    <fromname>Tether USDT</fromname>
-    <toname>Armenian Dram</toname>
+    <out>385.00</out>
+    <fromname>Tether USDT (TRC20)</fromname>
+    <toname>Armenian Dram (Cash)</toname>
     <minamount>10</minamount>
     <maxamount>50000</maxamount>
   </item>
   <item>
-    <from>AMD</from>
-    <to>USDT</to>
-    <in>405</in>
+    <from>CASHAMD</from>
+    <to>USDTTRC20</to>
+    <in>390</in>
     <out>1</out>
-    <fromname>Armenian Dram</fromname>
-    <toname>Tether USDT</toname>
+    <fromname>Armenian Dram (Cash)</fromname>
+    <toname>Tether USDT (TRC20)</toname>
     <minamount>5000</minamount>
     <maxamount>20000000</maxamount>
   </item>
 
-  <!-- USD <-> USDT -->
+  <!-- USDT TRC20 <-> AMD Card -->
   <item>
-    <from>USD</from>
-    <to>USDT</to>
+    <from>USDTTRC20</from>
+    <to>CARDAMD</to>
     <in>1</in>
-    <out>0.998</out>
-    <fromname>US Dollar Cash</fromname>
-    <toname>Tether USDT</toname>
-  </item>
-  <item>
-    <from>USDT</from>
-    <to>USD</to>
-    <in>1</in>
-    <out>0.995</out>
-    <fromname>Tether USDT</fromname>
-    <toname>US Dollar Cash</toname>
+    <out>383.00</out>
+    <fromname>Tether USDT (TRC20)</fromname>
+    <toname>Armenian Dram (Card)</toname>
   </item>
 
-  <!-- USDT -> RUB (Sberbank) -->
+  <!-- USD <-> USDT TRC20 -->
   <item>
-    <from>USDT</from>
+    <from>CASHUSD</from>
+    <to>USDTTRC20</to>
+    <in>1</in>
+    <out>0.998</out>
+    <fromname>US Dollar (Cash)</fromname>
+    <toname>Tether USDT (TRC20)</toname>
+  </item>
+  <item>
+    <from>USDTTRC20</from>
+    <to>CASHUSD</to>
+    <in>1</in>
+    <out>0.995</out>
+    <fromname>Tether USDT (TRC20)</fromname>
+    <toname>US Dollar (Cash)</toname>
+  </item>
+
+  <!-- USDT TRC20 -> RUB (Sberbank) -->
+  <item>
+    <from>USDTTRC20</from>
     <to>SBERRUB</to>
     <in>1</in>
-    <out>96.50</out>
-    <fromname>Tether USDT</fromname>
+    <out>91.50</out>
+    <fromname>Tether USDT (TRC20)</fromname>
     <toname>Sberbank RUB</toname>
     <method>sberbank</method>
     <minamount>50</minamount>
     <maxamount>100000</maxamount>
   </item>
 
-  <!-- USDT -> RUB (Tinkoff) -->
+  <!-- USDT TRC20 -> RUB (Tinkoff) -->
   <item>
-    <from>USDT</from>
+    <from>USDTTRC20</from>
     <to>TCSBRUB</to>
     <in>1</in>
-    <out>96.00</out>
-    <fromname>Tether USDT</fromname>
+    <out>91.00</out>
+    <fromname>Tether USDT (TRC20)</fromname>
     <toname>Tinkoff RUB</toname>
     <method>tinkoff</method>
     <minamount>50</minamount>
     <maxamount>100000</maxamount>
   </item>
 
-  <!-- USDT -> RUB (Alfabank) -->
+  <!-- USDT TRC20 -> RUB (Alfabank) -->
   <item>
-    <from>USDT</from>
+    <from>USDTTRC20</from>
     <to>ACRUB</to>
     <in>1</in>
-    <out>95.80</out>
-    <fromname>Tether USDT</fromname>
+    <out>90.80</out>
+    <fromname>Tether USDT (TRC20)</fromname>
     <toname>Alfabank RUB</toname>
     <method>alfabank</method>
   </item>
 
-  <!-- RUB (Sberbank) -> USDT -->
+  <!-- USDT BEP20 -> AMD Cash (alternative network) -->
   <item>
-    <from>SBERRUB</from>
-    <to>USDT</to>
-    <in>98</in>
-    <out>1</out>
-    <fromname>Sberbank RUB</fromname>
-    <toname>Tether USDT</toname>
-    <method>sberbank</method>
+    <from>USDTBEP20</from>
+    <to>CASHAMD</to>
+    <in>1</in>
+    <out>384.50</out>
+    <fromname>Tether USDT (BEP20)</fromname>
+    <toname>Armenian Dram (Cash)</toname>
   </item>
 
-  <!-- USDT -> EUR -->
+  <!-- RUB (Sberbank) -> USDT TRC20 -->
   <item>
-    <from>USDT</from>
-    <to>EUR</to>
-    <in>1</in>
-    <out>0.92</out>
-    <fromname>Tether USDT</fromname>
-    <toname>Euro</toname>
+    <from>SBERRUB</from>
+    <to>USDTTRC20</to>
+    <in>93</in>
+    <out>1</out>
+    <fromname>Sberbank RUB</fromname>
+    <toname>Tether USDT (TRC20)</toname>
+    <method>sberbank</method>
   </item>
 </rates>

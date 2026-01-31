@@ -70,6 +70,20 @@ class Settings(BaseSettings):
         description="Path to fixture XML for DRY_RUN mode"
     )
 
+    # Default units for normalization (maps user-friendly names to XML codes)
+    default_usdt_unit: str = Field(
+        default="USDTTRC20",
+        description="Default USDT network unit"
+    )
+    default_amd_unit: str = Field(
+        default="CASHAMD",
+        description="Default AMD unit (CASHAMD or CARDAMD)"
+    )
+    default_usd_unit: str = Field(
+        default="CASHUSD",
+        description="Default USD unit"
+    )
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
