@@ -195,7 +195,8 @@ class TestErrors:
         assert "zero" in result.error.lower()
 
     def test_invalid_syntax(self, calc):
-        result = calc.calculate("2 + + 2")
+        # Note: "2 + + 2" is valid Python (equals 4), so use truly invalid syntax
+        result = calc.calculate("2 + * 2")
         assert not result.success
 
     def test_empty_expression(self, calc):

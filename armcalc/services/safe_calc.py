@@ -63,9 +63,9 @@ class SafeCalculator:
         "e": math.e,
     }
 
-    # Pattern for valid expression characters
+    # Pattern for valid expression characters (includes comma for multi-arg functions)
     VALID_PATTERN = re.compile(
-        r"^[\d\s+\-*/().,%^a-zA-Z_]+$"
+        r"^[\d\s+\-*/().,%^a-zA-Z_,]+$"
     )
 
     # Pattern for function calls
@@ -120,9 +120,9 @@ class SafeCalculator:
         last_end = 0
         tokens = []
 
-        # Tokenize expression
+        # Tokenize expression (includes comma for multi-arg functions like pow(2, 10))
         token_pattern = re.compile(
-            r"(\d+\.?\d*%|\d+\.?\d*|[+\-*/()^]|[a-zA-Z_][a-zA-Z0-9_]*)"
+            r"(\d+\.?\d*%|\d+\.?\d*|[+\-*/()^,]|[a-zA-Z_][a-zA-Z0-9_]*)"
         )
 
         for match in token_pattern.finditer(expr):
