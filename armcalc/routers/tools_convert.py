@@ -1,4 +1,4 @@
-"""Conversion tools: price, convert, unit, rates."""
+"""Conversion tools: price, convert, rates."""
 
 from decimal import Decimal
 from typing import Optional, Tuple
@@ -9,7 +9,6 @@ from aiogram.types import Message
 
 from armcalc.services.price_service import get_price_service
 from armcalc.services.fx_service import get_fx_service, ConversionResult
-from armcalc.services.unit_service import get_unit_service
 from armcalc.services.exswaping_xml_service import (
     get_xml_service,
     RUB_METHOD_ALIASES,
@@ -415,62 +414,3 @@ async def cmd_rates(message: Message) -> None:
     lines.append("\n<i>Use /convert to convert</i>")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
-
-
-@router.message(Command("unit", "u"))
-async def cmd_unit(message: Message) -> None:
-    """
-    Convert between units.
-
-    Usage: /unit <amount> <from_unit> <to_unit>
-    Example: /unit 10 km miles
-    """
-    if not message.text:
-        return
-
-    parts = message.text.split()
-
-    if len(parts) < 4:
-        unit_service = get_unit_service()
-        categories = unit_service.get_supported_units()
-        help_lines = ["Usage: <code>/unit 10 km miles</code>", ""]
-        for cat, units in list(categories.items())[:4]:
-            help_lines.append(f"<b>{cat.title()}</b>: {', '.join(units[:6])}")
-        await message.answer("\n".join(help_lines), parse_mode="HTML")
-        return
-
-    amount = parse_float(parts[1])
-    from_unit = parts[2].lower()
-    to_unit = parts[3].lower()
-
-    if amount is None:
-        await message.answer("Invalid amount.", parse_mode="HTML")
-        return
-
-    unit_service = get_unit_service()
-    result = unit_service.convert(amount, from_unit, to_unit)
-
-    if result is None:
-        await message.answer(
-            f"Cannot convert '{from_unit}' to '{to_unit}'.\n"
-            f"Check unit names.",
-            parse_mode="HTML",
-        )
-        return
-
-    result_text = (
-        f"📐 <b>Unit Conversion</b> ({result.category})\n\n"
-        f"<b>{result.formatted}</b>"
-    )
-
-    # Save to history
-    user_id = message.from_user.id if message.from_user else 0
-    history = get_history_store()
-    history.add_entry(
-        user_id,
-        f"{amount} {from_unit} -> {to_unit}",
-        result.formatted,
-        "unit",
-    )
-
-    await message.answer(result_text, parse_mode="HTML")

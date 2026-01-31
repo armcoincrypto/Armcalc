@@ -28,7 +28,6 @@ async def cmd_start(message: Message) -> None:
         "• Math: `2+2`, `100+10%`\n"
         "• Scientific: `sqrt(16)`, `sin(90)`\n"
         "• Crypto: /price btc\n"
-        "• Currency: /convert 100 usd amd\n"
-        "• Units: /unit 10 km miles\n\n"
+        "• Currency: /convert 100 usd amd\n\n"
         "Use /help for all commands."
     )

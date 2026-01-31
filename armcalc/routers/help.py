@@ -66,13 +66,6 @@ Some pairs (AMD↔USDT, USD↔USDT, RUB) use exchanger XML rates.
 • `/rates usdt` - USDT targets
 • `/rates sberbank` - Sberbank rates
 
-📐 **Unit Conversion**
-• `/unit 10 km miles`
-• `/unit 100 kg lbs`
-• `/unit 25 c f` (Celsius to Fahrenheit)
-
-Categories: distance (km, m, miles, ft), weight (kg, lbs, oz), temperature (c, f, k), volume (l, gal), speed (kmh, mph)
-
 ━━━━━━━━━━━━━━━━━━━━
 
 💵 **Financial Tools**
