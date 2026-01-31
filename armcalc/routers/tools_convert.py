@@ -313,7 +313,7 @@ async def cmd_convert(message: Message) -> None:
 @router.message(Command("rates"))
 async def cmd_rates(message: Message) -> None:
     """
-    Show main exchange rates (USDT, AMD, RUB).
+    Show exchange rates - main pairs and crypto.
     """
     if not message.text:
         return
@@ -325,22 +325,35 @@ async def cmd_rates(message: Message) -> None:
 
     lines = ["📊 <b>Exchange Rates</b>\n"]
 
-    # Get USDT -> AMD
+    # USDT <-> AMD
+    lines.append("<b>USDT ↔ AMD</b>")
     rate = await xml_service.get_rate("USDT", "AMD")
     if rate:
-        lines.append(f"USDT → AMD: <b>{rate.rate:.2f}</b>")
-
-    # Get AMD -> USDT
+        lines.append(f"  Buy AMD: 1 USDT = {rate.rate:.2f} AMD")
     rate = await xml_service.get_rate("AMD", "USDT")
     if rate:
-        lines.append(f"AMD → USDT: <b>{rate.rate:.6f}</b>")
+        lines.append(f"  Sell AMD: {1/rate.rate:.2f} AMD = 1 USDT")
 
     lines.append("")
 
-    # Get RUB methods
-    for method in ["sberbank", "tinkoff"]:
+    # USDT -> RUB methods
+    lines.append("<b>USDT → RUB</b>")
+    for method in ["sberbank", "tinkoff", "alfabank"]:
         rate = await xml_service.get_rate("USDT", "RUB", method)
         if rate:
-            lines.append(f"USDT → RUB ({method.title()}): <b>{rate.rate:.2f}</b>")
+            lines.append(f"  {method.title()}: 1 USDT = {rate.rate:.2f} RUB")
+
+    lines.append("")
+
+    # Crypto -> USDT
+    lines.append("<b>Crypto → USDT</b>")
+    cryptos = ["BTC", "ETH", "TON", "SOL", "XRP", "LTC", "DOGE"]
+    for crypto in cryptos:
+        # Try to find rate from crypto to USDT
+        directions = await xml_service.list_directions(filter_from=crypto)
+        usdt_dirs = [d for d in directions if "USDT" in d.to_code]
+        if usdt_dirs:
+            d = usdt_dirs[0]
+            lines.append(f"  {crypto}: {d.rate:.2f} USDT")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
