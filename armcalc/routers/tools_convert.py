@@ -82,6 +82,31 @@ def detect_rub_method(tokens: list[str]) -> Tuple[str, Optional[str]]:
     return (tokens[0].upper(), None)
 
 
+def get_default_disclosure(user_code: str, xml_code: str, settings) -> Optional[str]:
+    """
+    Get disclosure message if a default was used.
+
+    Returns message like "Using USDT TRC20 (default)" if user typed "usdt"
+    but we resolved to "USDTTRC20".
+    """
+    user_upper = user_code.upper().strip()
+
+    # Check if user typed generic code that was normalized to specific unit
+    if user_upper == "USDT" and xml_code.upper() != "USDT":
+        network = xml_code.upper().replace("USDT", "")
+        return f"USDT {network} network"
+
+    if user_upper == "AMD" and xml_code.upper() not in ("AMD",):
+        variant = xml_code.upper().replace("AMD", "")
+        return f"AMD {variant.title()}"
+
+    if user_upper == "USD" and xml_code.upper() not in ("USD",):
+        variant = xml_code.upper().replace("USD", "")
+        return f"USD {variant.title()}"
+
+    return None
+
+
 def parse_convert_args(parts: list[str]) -> Tuple[Optional[Decimal], str, str, Optional[str]]:
     """
     Parse /convert command arguments.
@@ -256,12 +281,28 @@ async def cmd_convert(message: Message) -> None:
             else:
                 amount_str = f"{amount:,.2f}"
 
-            # Clean 3-line output format
+            # Check if defaults were used and build disclosure
+            disclosures = []
+            from_disc = get_default_disclosure(from_curr, rate_quote.from_code, settings)
+            to_disc = get_default_disclosure(to_curr, rate_quote.to_code, settings)
+            if from_disc:
+                disclosures.append(from_disc)
+            if to_disc:
+                disclosures.append(to_disc)
+            if to_curr.upper() == "RUB" and not method and rate_quote.method:
+                disclosures.append(f"RUB {rate_quote.method.title()}")
+
+            # Build result text
             result_text = (
                 f"💱 <b>Conversion</b>\n\n"
                 f"{amount_str} {from_display} → {result_str} {to_display}\n"
                 f"Rate: 1 {from_display} = {rate_quote.rate:.4f} {to_display}"
             )
+
+            # Add disclosure if defaults were used
+            if disclosures:
+                result_text += f"\n\n<i>Using: {', '.join(disclosures)} (default)</i>"
+                result_text += "\n<i>See /pairs for other options</i>"
 
             history.add_entry(
                 user_id,
@@ -308,6 +349,132 @@ async def cmd_convert(message: Message) -> None:
     )
 
     await message.answer(result_text, parse_mode="HTML")
+
+
+@router.message(Command("pairs"))
+async def cmd_pairs(message: Message) -> None:
+    """
+    Show available networks/methods for a currency.
+
+    Usage:
+    - /pairs usdt - show USDT networks
+    - /pairs rub - show RUB payment methods
+    - /pairs amd - show AMD options
+    """
+    if not message.text:
+        return
+
+    parts = message.text.split()
+
+    xml_service = get_xml_service()
+    await message.bot.send_chat_action(message.chat.id, "typing")
+
+    if len(parts) < 2:
+        # Show overview
+        lines = [
+            "📊 <b>Available Pairs</b>\n",
+            "<b>USDT networks:</b>",
+            "• TRC20 (default), BEP20, ERC20",
+            "• Specify: <code>/convert 100 usdttrc20 amd</code>\n",
+            "<b>AMD options:</b>",
+            "• Cash (default), Card",
+            "• Specify: <code>/convert 100 usdt cardamd</code>\n",
+            "<b>RUB methods:</b>",
+            "• sberbank (default), tinkoff, alfa, vtb",
+            "• Specify: <code>/convert 100 usdt sberbank rub</code>\n",
+            "<b>Crypto:</b>",
+            "• BTC, ETH, TON, SOL, XRP, LTC, DOGE\n",
+            "Use <code>/pairs usdt</code> for detailed rates.",
+        ]
+        await message.answer("\n".join(lines), parse_mode="HTML")
+        return
+
+    currency = parts[1].upper().strip()
+
+    # Show pairs for this currency
+    if currency in ("USDT", "USDTTRC20", "USDTBEP20", "USDTERC20"):
+        # USDT -> various targets
+        lines = ["📊 <b>USDT Pairs</b>\n"]
+
+        # Networks available
+        lines.append("<b>Networks:</b>")
+        lines.append("• TRC20 (default) - lowest fees")
+        lines.append("• BEP20 - Binance Smart Chain")
+        lines.append("• ERC20 - Ethereum (higher fees)\n")
+
+        # Targets
+        lines.append("<b>Convert to:</b>")
+        rate = await xml_service.get_rate("USDT", "AMD")
+        if rate:
+            lines.append(f"• AMD (Cash): 1 USDT = {rate.rate:.2f} AMD")
+        rate = await xml_service.get_rate("USDT", "CARDAMD")
+        if rate:
+            lines.append(f"• AMD (Card): 1 USDT = {rate.rate:.2f} AMD")
+
+        for method in ["sberbank", "tinkoff", "alfabank"]:
+            rate = await xml_service.get_rate("USDT", "RUB", method)
+            if rate:
+                lines.append(f"• RUB ({method.title()}): 1 USDT = {rate.rate:.2f} RUB")
+
+        lines.append("\n<b>Examples:</b>")
+        lines.append("<code>/convert 100 usdt amd</code>")
+        lines.append("<code>/convert 100 usdt sberbank rub</code>")
+
+        await message.answer("\n".join(lines), parse_mode="HTML")
+
+    elif currency in ("AMD", "CASHAMD", "CARDAMD"):
+        lines = ["📊 <b>AMD Pairs</b>\n"]
+        lines.append("<b>Options:</b>")
+        lines.append("• Cash (default)")
+        lines.append("• Card\n")
+
+        lines.append("<b>Convert to:</b>")
+        rate = await xml_service.get_rate("AMD", "USDT")
+        if rate:
+            inverse = 1 / rate.rate if rate.rate else 0
+            lines.append(f"• USDT: {inverse:.2f} AMD = 1 USDT")
+
+        lines.append("\n<b>Examples:</b>")
+        lines.append("<code>/convert 50000 amd usdt</code>")
+        lines.append("<code>/convert 50000 cardamd usdt</code>")
+
+        await message.answer("\n".join(lines), parse_mode="HTML")
+
+    elif currency == "RUB":
+        lines = ["📊 <b>RUB Payment Methods</b>\n"]
+        settings = get_settings()
+        lines.append(f"<b>Default:</b> {settings.default_rub_method}\n")
+
+        lines.append("<b>Available:</b>")
+        for method in ["sberbank", "tinkoff", "alfabank", "vtb"]:
+            rate = await xml_service.get_rate("USDT", "RUB", method)
+            if rate:
+                lines.append(f"• {method.title()}: 1 USDT = {rate.rate:.2f} RUB")
+
+        lines.append("\n<b>Examples:</b>")
+        lines.append("<code>/convert 100 usdt sberbank rub</code>")
+        lines.append("<code>/convert 100 usdt tinkoff rub</code>")
+
+        await message.answer("\n".join(lines), parse_mode="HTML")
+
+    else:
+        # Try to show what's available for this crypto
+        directions = await xml_service.list_directions(filter_from=currency)
+        if directions:
+            lines = [f"📊 <b>{currency} Pairs</b>\n"]
+            usdt_dirs = [d for d in directions if "USDT" in d.to_code]
+            if usdt_dirs:
+                d = usdt_dirs[0]
+                lines.append(f"• {currency} → USDT: {d.rate:.2f}")
+            lines.append(f"\n<b>Example:</b>")
+            lines.append(f"<code>/convert 1 {currency.lower()} usdt</code>")
+            await message.answer("\n".join(lines), parse_mode="HTML")
+        else:
+            await message.answer(
+                f"No pairs found for {currency}.\n\n"
+                "Try: <code>/pairs usdt</code>, <code>/pairs amd</code>, <code>/pairs rub</code>",
+                parse_mode="HTML",
+            )
 
 
 @router.message(Command("rates"))
