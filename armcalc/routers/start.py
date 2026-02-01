@@ -13,30 +13,23 @@ START_TEXT = """
 Barev! 🤖 I'm <b>Armcalc</b>
 
 <b>🧮 Calculator</b>
-Just type any math expression:
-• <code>2+2</code> → 4
-• <code>100+10%</code> → 110
-• <code>sqrt(16)</code> → 4
-• <code>sin(90)</code> → 1
-• <code>pow(2,10)</code> → 1024
+Just type math: <code>2+2</code>, <code>sqrt(16)</code>, <code>100+10%</code>
 
 <b>💱 Currency</b>
 /convert 100 usdt amd
-/convert 100 amd usdt
 /convert 100 usdt sberbank rub
-/convert 100 usdt tinkoff rub
+/pairs - See available options
+
+<i>Defaults: USDT=TRC20, AMD=Cash, RUB=Sberbank</i>
 
 <b>📊 Rates</b>
 /rates - Current exchange rates
 
 <b>💰 Crypto</b>
-/price btc - Bitcoin price
-/price eth - Ethereum price
+/price btc, /price eth
 
 <b>📋 Other</b>
-/history - Your calculations
-/keyboard - Calculator buttons
-/help - All commands
+/history, /keyboard, /help
 """
 
 

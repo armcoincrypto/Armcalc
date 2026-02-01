@@ -15,32 +15,31 @@ Just type any math:
 • <code>2+2</code> → 4
 • <code>100+10%</code> → 110
 • <code>sqrt(16)</code> → 4
-• <code>sin(90)</code> → 1
-• <code>cos(0)</code> → 1
-• <code>tan(45)</code> → 1
-• <code>log(100)</code> → 2
 • <code>pow(2,10)</code> → 1024
-• <code>pi</code> → 3.14159
-• <code>e</code> → 2.71828
 
 <b>💱 Currency Conversion</b>
 /convert 100 usdt amd
 /convert 100 amd usdt
 /convert 100 usdt sberbank rub
-/convert 100 usdt tinkoff rub
 
-<b>📊 Exchange Rates</b>
-/rates - Show current rates
+<b>Defaults:</b>
+• USDT → TRC20 network
+• AMD → Cash
+• RUB → Sberbank
+<i>Use /pairs to see other options</i>
+
+<b>📊 Rates &amp; Pairs</b>
+/rates - Current exchange rates
+/pairs - Available networks/methods
+/pairs usdt - USDT options
 
 <b>💰 Crypto Prices</b>
 /price btc - Bitcoin
 /price eth - Ethereum
-/price sol - Solana
 
 <b>📋 Other</b>
-/history - Your last calculations
+/history - Recent calculations
 /keyboard - Calculator keyboard
-/help - This message
 """
 
 
