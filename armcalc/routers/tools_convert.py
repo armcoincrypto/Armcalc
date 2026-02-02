@@ -1,7 +1,7 @@
 """Conversion tools: price, convert, rates."""
 
 from decimal import Decimal
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -27,9 +27,7 @@ from armcalc.services.convert_state import (
     set_rub_method,
     set_result,
     get_xml_codes,
-    check_availability,
-    auto_fix_state,
-    get_allowed_options,
+    AvailabilityResult,
 )
 from armcalc.keyboards.convert_panel import (
     ConvertPanelCallback,
@@ -47,67 +45,248 @@ async def _get_available_pairs(xml_service) -> set:
     """
     Get set of available (from_xml, to_xml) pairs from XML service.
 
-    Returns set of tuples for fast lookup.
-    Includes both raw codes and normalized variants for matching.
+    Returns set of tuples for fast lookup using RAW XML codes.
     """
     directions = await xml_service.list_directions()
     pairs = set()
 
-    # Mapping from generic codes to specific variants
-    usdt_nets = ["USDTTRC20", "USDTBEP20", "USDTERC20"]
-    amd_units = ["CASHAMD", "CARDAMD"]
-    usd_units = ["CASHUSD"]
-    rub_methods = ["SBERRUB", "TCSBRUB", "ACRUB", "VTBRUB"]
-
     for d in directions:
         from_code = d.from_code.upper()
         to_code = d.to_code.upper()
-
-        # Add raw pair
         pairs.add((from_code, to_code))
 
-        # If from code is USDT (any variant), add all USDT normalized forms
-        if from_code.startswith("USDT"):
-            for net in usdt_nets:
-                pairs.add((net, to_code))
-                # Also add combinations with to_code variants
-                if to_code.endswith("AMD") or to_code == "AMD":
-                    for unit in amd_units:
-                        pairs.add((net, unit))
-                if to_code.endswith("USD") or to_code == "USD":
-                    for unit in usd_units:
-                        pairs.add((net, unit))
-                if to_code.endswith("RUB") or to_code == "RUB":
-                    for meth in rub_methods:
-                        pairs.add((net, meth))
-
-        # If to code is USDT (any variant), add all USDT normalized forms
-        if to_code.startswith("USDT"):
-            for net in usdt_nets:
-                pairs.add((from_code, net))
-                # Also add combinations with from_code variants
-                if from_code.endswith("AMD") or from_code == "AMD":
-                    for unit in amd_units:
-                        pairs.add((unit, net))
-                if from_code.endswith("USD") or from_code == "USD":
-                    for unit in usd_units:
-                        pairs.add((unit, net))
-
-        # Generic AMD/USD variants
-        if from_code == "AMD" or from_code.endswith("AMD"):
-            for unit in amd_units:
-                pairs.add((unit, to_code))
-        if to_code == "AMD" or to_code.endswith("AMD"):
-            for unit in amd_units:
-                pairs.add((from_code, unit))
-        if from_code == "USD" or from_code.endswith("USD"):
-            for unit in usd_units:
-                pairs.add((unit, to_code))
-        if to_code == "USD" or to_code.endswith("USD"):
-            for unit in usd_units:
-                pairs.add((from_code, unit))
-
     return pairs
+
+
+async def check_pair_available_async(
+    xml_service,
+    from_code: str,
+    to_code: str,
+    method: Optional[str] = None,
+) -> bool:
+    """
+    Check if a specific pair is available using xml_service.get_rate().
+
+    This is the authoritative check - if get_rate() returns a value,
+    the pair is available. This matches exactly what the convert action uses.
+    """
+    rate = await xml_service.get_rate(from_code, to_code, method)
+    return rate is not None
+
+
+async def check_availability_async(
+    state,
+    xml_service,
+) -> "AvailabilityResult":
+    """
+    Async version of check_availability that uses xml_service.get_rate() directly.
+
+    This is more accurate than the set-based check because it uses the same
+    lookup logic that the actual conversion uses.
+    """
+    from armcalc.services.convert_state import (
+        AvailabilityResult,
+        involves_rub,
+        USDT_NETWORKS,
+        RUB_METHODS,
+        AMD_UNITS,
+    )
+
+    # Get the codes that will be used for conversion
+    from_code, to_code, method = get_xml_codes(state)
+
+    # Check if pair is available using actual xml_service lookup
+    rate = await xml_service.get_rate(state.from_code, state.to_code, method)
+
+    if rate is not None:
+        return AvailabilityResult(
+            available=True,
+            from_xml=rate.from_code,
+            to_xml=rate.to_code,
+            method=rate.method,
+        )
+
+    # Not available - find suggestions by trying alternatives
+    suggestions = []
+    reason = f"{state.from_code.upper()} → {state.to_code.upper()} not available"
+
+    # Try alternative AMD units
+    if state.to_code == "amd":
+        for unit in AMD_UNITS:
+            if unit == state.amd_unit:
+                continue
+            # Temporarily check with different unit
+            test_to = "CASHAMD" if unit == "cash" else "CARDAMD"
+            if await xml_service.get_rate(state.from_code, test_to, method):
+                suggestions.append(("amd_unit", unit, f"AMD {unit.title()}"))
+                reason = f"AMD {state.amd_unit.title()} not available"
+                break
+
+    if state.from_code == "amd":
+        for unit in AMD_UNITS:
+            if unit == state.amd_unit:
+                continue
+            test_from = "CASHAMD" if unit == "cash" else "CARDAMD"
+            if await xml_service.get_rate(test_from, state.to_code, method):
+                suggestions.append(("amd_unit", unit, f"AMD {unit.title()}"))
+                reason = f"AMD {state.amd_unit.title()} not available"
+                break
+
+    # Try alternative USDT networks
+    if state.from_code == "usdt":
+        for net in USDT_NETWORKS:
+            if net == state.usdt_network:
+                continue
+            test_from = f"USDT{net.upper()}"
+            if await xml_service.get_rate(test_from, state.to_code, method):
+                suggestions.append(("network", net, f"USDT {net.upper()}"))
+                reason = f"USDT {state.usdt_network.upper()} not available"
+                break
+
+    if state.to_code == "usdt":
+        for net in USDT_NETWORKS:
+            if net == state.usdt_network:
+                continue
+            test_to = f"USDT{net.upper()}"
+            if await xml_service.get_rate(state.from_code, test_to, method):
+                suggestions.append(("network", net, f"USDT {net.upper()}"))
+                reason = f"USDT {state.usdt_network.upper()} not available"
+                break
+
+    # Try alternative RUB methods
+    if state.to_code == "rub":
+        for meth in RUB_METHODS:
+            if meth == state.rub_method:
+                continue
+            if await xml_service.get_rate(state.from_code, "RUB", meth):
+                suggestions.append(("rub_method", meth, f"RUB {meth.title()}"))
+                reason = f"RUB {state.rub_method.title()} not available"
+                break
+
+    if state.from_code == "rub":
+        for meth in RUB_METHODS:
+            if meth == state.rub_method:
+                continue
+            if await xml_service.get_rate("RUB", state.to_code, meth):
+                suggestions.append(("rub_method", meth, f"RUB {meth.title()}"))
+                reason = f"RUB {state.rub_method.title()} not available"
+                break
+
+    return AvailabilityResult(
+        available=False,
+        from_xml=from_code,
+        to_xml=to_code,
+        method=method,
+        reason=reason,
+        suggestions=suggestions[:3],
+    )
+
+
+async def auto_fix_state_async(
+    state,
+    xml_service,
+):
+    """
+    Async version of auto_fix_state that uses xml_service directly.
+
+    Returns (fixed_state, availability_result).
+    """
+    from armcalc.services.convert_state import (
+        set_amd_unit,
+        set_usdt_network,
+        set_rub_method,
+        AUTO_FIX_UNAVAILABLE,
+    )
+
+    result = await check_availability_async(state, xml_service)
+
+    if result.available or not AUTO_FIX_UNAVAILABLE:
+        return state, result
+
+    # Apply first suggestion
+    if result.suggestions:
+        action, value, display = result.suggestions[0]
+
+        if action == "amd_unit":
+            old_val = state.amd_unit.title()
+            state = set_amd_unit(state, value)
+            result.adjusted = True
+            result.adjustment_msg = f"AMD {old_val} → AMD {value.title()} (not available)"
+
+        elif action == "network":
+            old_val = state.usdt_network.upper()
+            state = set_usdt_network(state, value)
+            result.adjusted = True
+            result.adjustment_msg = f"USDT {old_val} → USDT {value.upper()} (not available)"
+
+        elif action == "rub_method":
+            old_val = state.rub_method.title()
+            state = set_rub_method(state, value)
+            result.adjusted = True
+            result.adjustment_msg = f"RUB {old_val} → RUB {value.title()} (not available)"
+
+        # Re-check after fix
+        new_result = await check_availability_async(state, xml_service)
+        new_result.adjusted = result.adjusted
+        new_result.adjustment_msg = result.adjustment_msg
+        return state, new_result
+
+    return state, result
+
+
+async def get_allowed_options_async(
+    state,
+    xml_service,
+) -> Dict[str, set]:
+    """
+    Async version of get_allowed_options that uses xml_service directly.
+
+    Returns dict with keys: networks, amd_units, rub_methods
+    """
+    from armcalc.services.convert_state import (
+        USDT_NETWORKS,
+        AMD_UNITS,
+        RUB_METHODS,
+    )
+
+    allowed = {
+        "networks": set(),
+        "amd_units": set(),
+        "rub_methods": set(),
+    }
+    method = state.rub_method if state.from_code == "rub" or state.to_code == "rub" else None
+
+    # Check USDT networks
+    if state.from_code == "usdt" or state.to_code == "usdt":
+        for net in USDT_NETWORKS:
+            test_from = state.from_code
+            test_to = state.to_code
+            if state.from_code == "usdt":
+                test_from = f"USDT{net.upper()}"
+            if state.to_code == "usdt":
+                test_to = f"USDT{net.upper()}"
+            if await xml_service.get_rate(test_from, test_to, method):
+                allowed["networks"].add(net)
+
+    # Check AMD units
+    if state.from_code == "amd" or state.to_code == "amd":
+        for unit in AMD_UNITS:
+            test_from = state.from_code
+            test_to = state.to_code
+            if state.from_code == "amd":
+                test_from = "CASHAMD" if unit == "cash" else "CARDAMD"
+            if state.to_code == "amd":
+                test_to = "CASHAMD" if unit == "cash" else "CARDAMD"
+            if await xml_service.get_rate(test_from, test_to, method):
+                allowed["amd_units"].add(unit)
+
+    # Check RUB methods
+    if state.from_code == "rub" or state.to_code == "rub":
+        for meth in RUB_METHODS:
+            if await xml_service.get_rate(state.from_code, state.to_code, meth):
+                allowed["rub_methods"].add(meth)
+
+    return allowed
 
 
 def parse_float(value: str) -> float | None:
@@ -332,17 +511,16 @@ async def cmd_convert(message: Message) -> None:
     if len(parts) == 1:
         state = get_user_state(user_id)
 
-        # Get available pairs from XML
+        # Get XML service
         xml_service = get_xml_service()
         await xml_service.ensure_cache()
-        available_pairs = await _get_available_pairs(xml_service)
 
-        # Check availability and auto-fix if needed
-        state, availability = auto_fix_state(state, available_pairs)
+        # Check availability and auto-fix if needed (using async version)
+        state, availability = await auto_fix_state_async(state, xml_service)
         save_user_state(user_id, state)
 
-        # Get allowed options for keyboard
-        allowed = get_allowed_options(state, available_pairs)
+        # Get allowed options for keyboard (using async version)
+        allowed = await get_allowed_options_async(state, xml_service)
 
         await message.answer(
             render_panel_text(state, availability),
@@ -678,10 +856,9 @@ async def handle_convert_panel_callback(
 
     state = get_user_state(user_id)
 
-    # Get available pairs for validation
+    # Get XML service for validation (using async functions)
     xml_service = get_xml_service()
     await xml_service.ensure_cache()
-    available_pairs = await _get_available_pairs(xml_service)
 
     if action == "close":
         clear_user_state(user_id)
@@ -698,13 +875,13 @@ async def handle_convert_panel_callback(
     if action == "swap":
         state = swap_currencies(state)
         # Auto-fix after swap if needed
-        state, availability = auto_fix_state(state, available_pairs)
+        state, availability = await auto_fix_state_async(state, xml_service)
         save_user_state(user_id, state)
         await callback.answer("Swapped")
 
     elif action == "from":
         state = set_from_code(state, value)
-        state, availability = auto_fix_state(state, available_pairs)
+        state, availability = await auto_fix_state_async(state, xml_service)
         save_user_state(user_id, state)
         if availability.adjusted:
             await callback.answer(f"From: {value.upper()} (adjusted)", show_alert=False)
@@ -713,7 +890,7 @@ async def handle_convert_panel_callback(
 
     elif action == "to":
         state = set_to_code(state, value)
-        state, availability = auto_fix_state(state, available_pairs)
+        state, availability = await auto_fix_state_async(state, xml_service)
         save_user_state(user_id, state)
         if availability.adjusted:
             await callback.answer(f"To: {value.upper()} (adjusted)", show_alert=False)
@@ -722,7 +899,7 @@ async def handle_convert_panel_callback(
 
     elif action == "network":
         # Check if this network is available
-        allowed = get_allowed_options(state, available_pairs)
+        allowed = await get_allowed_options_async(state, xml_service)
         if value not in allowed.get("networks", set()):
             await callback.answer(f"USDT {value.upper()} not available for this pair", show_alert=True)
             # Still update to show status
@@ -734,7 +911,7 @@ async def handle_convert_panel_callback(
 
     elif action == "amd_unit":
         # Check if this unit is available
-        allowed = get_allowed_options(state, available_pairs)
+        allowed = await get_allowed_options_async(state, xml_service)
         if value not in allowed.get("amd_units", set()):
             await callback.answer(f"AMD {value.title()} not available for this pair", show_alert=True)
             state = set_amd_unit(state, value)
@@ -745,7 +922,7 @@ async def handle_convert_panel_callback(
 
     elif action == "rub_method":
         # Check if this method is available
-        allowed = get_allowed_options(state, available_pairs)
+        allowed = await get_allowed_options_async(state, xml_service)
         if value not in allowed.get("rub_methods", set()):
             await callback.answer(f"RUB {value.title()} not available for this pair", show_alert=True)
             state = set_rub_method(state, value)
@@ -764,8 +941,8 @@ async def handle_convert_panel_callback(
 
     elif action == "amount":
         await callback.answer("Send amount as a message", show_alert=False)
-        availability = check_availability(state, available_pairs)
-        allowed = get_allowed_options(state, available_pairs)
+        availability = await check_availability_async(state, xml_service)
+        allowed = await get_allowed_options_async(state, xml_service)
         try:
             await callback.message.edit_text(
                 render_panel_text(state, availability) + "\n\n✏️ <i>Send amount as a message...</i>",
@@ -777,8 +954,8 @@ async def handle_convert_panel_callback(
         return
 
     elif action == "convert":
-        # Check availability before converting
-        availability = check_availability(state, available_pairs)
+        # Check availability before converting (using xml_service.get_rate directly)
+        availability = await check_availability_async(state, xml_service)
 
         if not availability.available:
             await callback.answer(
@@ -786,7 +963,7 @@ async def handle_convert_panel_callback(
                 show_alert=True
             )
             # Update panel to show status
-            allowed = get_allowed_options(state, available_pairs)
+            allowed = await get_allowed_options_async(state, xml_service)
             try:
                 await callback.message.edit_text(
                     render_panel_text(state, availability),
@@ -799,53 +976,48 @@ async def handle_convert_panel_callback(
 
         await callback.answer("Converting...")
 
-        from_code, to_code, method = get_xml_codes(state)
+        # Use the same lookup that availability used - get_rate with user-friendly codes
+        method = state.rub_method if state.from_code == "rub" or state.to_code == "rub" else None
+        rate_quote = await xml_service.get_rate(state.from_code, state.to_code, method)
 
-        # Check if XML pair
-        if xml_service.is_xml_pair(from_code, to_code, method):
-            rate_quote = await xml_service.get_rate(from_code, to_code, method)
+        if rate_quote:
+            result_amount = rate_quote.convert(state.amount)
 
-            if rate_quote:
-                result_amount = rate_quote.convert(state.amount)
-
-                # Format result
-                to_upper = rate_quote.to_code.upper()
-                if "AMD" in to_upper or "RUB" in to_upper:
-                    result_str = f"{result_amount:,.0f} {rate_quote.display_to}"
-                else:
-                    result_str = f"{result_amount:,.2f} {rate_quote.display_to}"
-
-                rate_str = f"1 {rate_quote.display_from} = {rate_quote.rate:.4f} {rate_quote.display_to}"
-
-                state = set_result(state, result_str, rate_str)
-                save_user_state(user_id, state)
-
-                # Save to history
-                history = get_history_store()
-                history.add_entry(
-                    user_id,
-                    f"{state.amount} {rate_quote.display_from} -> {rate_quote.display_to}",
-                    result_str,
-                    "convert",
-                )
+            # Format result
+            to_upper = rate_quote.to_code.upper()
+            if "AMD" in to_upper or "RUB" in to_upper:
+                result_str = f"{result_amount:,.0f} {rate_quote.display_to}"
             else:
-                state = set_result(state, "Rate not available", "")
-                save_user_state(user_id, state)
+                result_str = f"{result_amount:,.2f} {rate_quote.display_to}"
+
+            rate_str = f"1 {rate_quote.display_from} = {rate_quote.rate:.4f} {rate_quote.display_to}"
+
+            state = set_result(state, result_str, rate_str)
+            save_user_state(user_id, state)
+
+            # Save to history
+            history = get_history_store()
+            history.add_entry(
+                user_id,
+                f"{state.amount} {rate_quote.display_from} -> {rate_quote.display_to}",
+                result_str,
+                "convert",
+            )
         else:
-            # Try FX service fallback
+            # Fallback to FX service
             fx_service = get_fx_service()
-            result = await fx_service.convert(float(state.amount), from_code, to_code)
+            result = await fx_service.convert(float(state.amount), state.from_code.upper(), state.to_code.upper())
 
             if result:
-                state = set_result(state, result.formatted, f"1 {from_code} = {result.rate:.4f} {to_code}")
+                state = set_result(state, result.formatted, f"1 {state.from_code.upper()} = {result.rate:.4f} {state.to_code.upper()}")
                 save_user_state(user_id, state)
             else:
                 state = set_result(state, "Pair not available", "")
                 save_user_state(user_id, state)
 
     # Update panel display with availability status
-    availability = check_availability(state, available_pairs)
-    allowed = get_allowed_options(state, available_pairs)
+    availability = await check_availability_async(state, xml_service)
+    allowed = await get_allowed_options_async(state, xml_service)
 
     try:
         await callback.message.edit_text(
