@@ -90,3 +90,7 @@ async def run_bot() -> None:
         raise
     finally:
         await bot.session.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(run_bot())
