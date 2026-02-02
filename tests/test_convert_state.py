@@ -285,3 +285,164 @@ class TestSetResult:
 
         assert state.last_result == "38,500 AMD"
         assert state.last_rate == "1 USDT = 385.00 AMD"
+
+
+# =============================================================================
+# Availability Engine Tests
+# =============================================================================
+
+from armcalc.services.convert_state import (
+    check_availability,
+    auto_fix_state,
+    get_allowed_options,
+    AUTO_FIX_UNAVAILABLE,
+)
+
+
+class TestCheckAvailability:
+    """Test availability checking."""
+
+    def test_available_pair(self):
+        """Test checking an available pair."""
+        state = create_state()  # usdt -> amd with trc20/cash defaults
+        available_pairs = {("USDTTRC20", "CASHAMD")}
+
+        result = check_availability(state, available_pairs)
+
+        assert result.available is True
+        assert result.from_xml == "USDTTRC20"
+        assert result.to_xml == "CASHAMD"
+
+    def test_unavailable_pair(self):
+        """Test checking an unavailable pair (card AMD)."""
+        state = create_state()
+        state = set_amd_unit(state, "card")
+        available_pairs = {("USDTTRC20", "CASHAMD")}  # Only cash available
+
+        result = check_availability(state, available_pairs)
+
+        assert result.available is False
+        assert "CARDAMD" in result.to_xml
+        assert result.reason is not None
+
+    def test_suggests_alternative(self):
+        """Test that unavailable pair suggests alternatives."""
+        state = create_state()
+        state = set_amd_unit(state, "card")
+        available_pairs = {("USDTTRC20", "CASHAMD")}
+
+        result = check_availability(state, available_pairs)
+
+        assert result.available is False
+        assert len(result.suggestions) > 0
+        # Should suggest AMD Cash
+        suggestion_values = [s[1] for s in result.suggestions]
+        assert "cash" in suggestion_values
+
+    def test_unavailable_network(self):
+        """Test unavailable USDT network suggests alternatives."""
+        state = create_state()
+        state = set_usdt_network(state, "erc20")
+        available_pairs = {("USDTTRC20", "CASHAMD"), ("USDTBEP20", "CASHAMD")}
+
+        result = check_availability(state, available_pairs)
+
+        assert result.available is False
+        # Should suggest TRC20 or BEP20
+        suggestion_values = [s[1] for s in result.suggestions]
+        assert "trc20" in suggestion_values or "bep20" in suggestion_values
+
+
+class TestAutoFixState:
+    """Test auto-fix functionality."""
+
+    def test_auto_fix_amd_unit(self):
+        """Test auto-fix changes AMD card to cash."""
+        state = create_state()
+        state = set_amd_unit(state, "card")
+        available_pairs = {("USDTTRC20", "CASHAMD")}
+
+        fixed_state, result = auto_fix_state(state, available_pairs)
+
+        if AUTO_FIX_UNAVAILABLE:
+            assert fixed_state.amd_unit == "cash"
+            assert result.adjusted is True
+            assert result.adjustment_msg is not None
+
+    def test_auto_fix_network(self):
+        """Test auto-fix changes network if unavailable."""
+        state = create_state()
+        state = set_usdt_network(state, "sol")
+        available_pairs = {("USDTTRC20", "CASHAMD")}
+
+        fixed_state, result = auto_fix_state(state, available_pairs)
+
+        if AUTO_FIX_UNAVAILABLE:
+            assert fixed_state.usdt_network == "trc20"
+            assert result.adjusted is True
+
+    def test_no_fix_when_available(self):
+        """Test no fix applied when already available."""
+        state = create_state()  # Default: usdt trc20 -> amd cash
+        available_pairs = {("USDTTRC20", "CASHAMD")}
+
+        fixed_state, result = auto_fix_state(state, available_pairs)
+
+        assert result.adjusted is False
+        assert result.available is True
+
+
+class TestGetAllowedOptions:
+    """Test allowed options calculation."""
+
+    def test_allowed_networks(self):
+        """Test getting allowed USDT networks."""
+        state = create_state()
+        available_pairs = {
+            ("USDTTRC20", "CASHAMD"),
+            ("USDTBEP20", "CASHAMD"),
+        }
+
+        allowed = get_allowed_options(state, available_pairs)
+
+        assert "trc20" in allowed["networks"]
+        assert "bep20" in allowed["networks"]
+        assert "erc20" not in allowed["networks"]
+
+    def test_allowed_amd_units(self):
+        """Test getting allowed AMD units."""
+        state = create_state()
+        available_pairs = {
+            ("USDTTRC20", "CASHAMD"),
+            ("USDTTRC20", "CARDAMD"),
+        }
+
+        allowed = get_allowed_options(state, available_pairs)
+
+        assert "cash" in allowed["amd_units"]
+        assert "card" in allowed["amd_units"]
+
+    def test_allowed_rub_methods(self):
+        """Test getting allowed RUB methods."""
+        state = create_state()
+        state = set_to_code(state, "rub")
+        available_pairs = {
+            ("USDTTRC20", "SBERRUB"),
+            ("USDTTRC20", "TCSBRUB"),
+        }
+
+        allowed = get_allowed_options(state, available_pairs)
+
+        assert "sberbank" in allowed["rub_methods"]
+        assert "tinkoff" in allowed["rub_methods"]
+        assert "vtb" not in allowed["rub_methods"]
+
+    def test_only_cash_amd_available(self):
+        """Test when only cash AMD is available."""
+        state = create_state()
+        available_pairs = {("USDTTRC20", "CASHAMD")}
+
+        allowed = get_allowed_options(state, available_pairs)
+
+        assert "cash" in allowed["amd_units"]
+        assert "card" not in allowed["amd_units"]

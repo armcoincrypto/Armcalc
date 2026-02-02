@@ -1,14 +1,17 @@
 """
 Convert panel inline keyboard.
 
-Provides the interactive UI for currency conversion.
+Provides the interactive UI for currency conversion with availability checking.
 """
+
+from typing import Dict, Optional, Set
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from armcalc.services.convert_state import (
     ConvertState,
+    AvailabilityResult,
     involves_usdt,
     involves_amd,
     involves_rub,
@@ -27,13 +30,27 @@ class ConvertPanelCallback(CallbackData, prefix="cvt"):
     value: str = ""
 
 
-def get_convert_panel_keyboard(state: ConvertState) -> InlineKeyboardMarkup:
+def get_convert_panel_keyboard(
+    state: ConvertState,
+    allowed: Optional[Dict[str, Set[str]]] = None,
+) -> InlineKeyboardMarkup:
     """
     Build the convert panel keyboard based on current state.
 
-    Dynamic rows based on which currencies are involved.
+    Args:
+        state: Current conversion state
+        allowed: Dict with allowed options for networks/amd_units/rub_methods
+                If None, all options are shown as available.
     """
     rows = []
+
+    # Default to all allowed if not specified
+    if allowed is None:
+        allowed = {
+            "networks": set(USDT_NETWORKS),
+            "amd_units": set(AMD_UNITS),
+            "rub_methods": set(RUB_METHODS),
+        }
 
     # Row 1: Actions
     rows.append([
@@ -76,9 +93,16 @@ def get_convert_panel_keyboard(state: ConvertState) -> InlineKeyboardMarkup:
     # Row 4: USDT Networks (only if USDT involved)
     if involves_usdt(state):
         network_buttons = []
+        allowed_nets = allowed.get("networks", set())
         for net in USDT_NETWORKS:
             is_selected = state.usdt_network == net
-            text = f"{'•' if is_selected else ''}{net.upper()}"
+            is_allowed = net in allowed_nets or not allowed_nets
+
+            if is_allowed:
+                text = f"{'•' if is_selected else ''}{net.upper()}"
+            else:
+                text = f"🚫{net.upper()}" if is_selected else f"—{net.upper()}"
+
             network_buttons.append(InlineKeyboardButton(
                 text=text,
                 callback_data=ConvertPanelCallback(action="network", value=net).pack()
@@ -88,9 +112,16 @@ def get_convert_panel_keyboard(state: ConvertState) -> InlineKeyboardMarkup:
     # Row 5: AMD Units (only if AMD involved)
     if involves_amd(state):
         unit_buttons = []
+        allowed_units = allowed.get("amd_units", set())
         for unit in AMD_UNITS:
             is_selected = state.amd_unit == unit
-            text = f"{'•' if is_selected else ''}{unit.title()}"
+            is_allowed = unit in allowed_units or not allowed_units
+
+            if is_allowed:
+                text = f"{'•' if is_selected else ''}{unit.title()}"
+            else:
+                text = f"🚫{unit.title()}" if is_selected else f"—{unit.title()}"
+
             unit_buttons.append(InlineKeyboardButton(
                 text=text,
                 callback_data=ConvertPanelCallback(action="amd_unit", value=unit).pack()
@@ -100,9 +131,16 @@ def get_convert_panel_keyboard(state: ConvertState) -> InlineKeyboardMarkup:
     # Row 6: RUB Methods (only if RUB involved)
     if involves_rub(state):
         method_buttons = []
+        allowed_methods = allowed.get("rub_methods", set())
         for method in RUB_METHODS:
             is_selected = state.rub_method == method
-            text = f"{'•' if is_selected else ''}{method.title()}"
+            is_allowed = method in allowed_methods or not allowed_methods
+
+            if is_allowed:
+                text = f"{'•' if is_selected else ''}{method.title()}"
+            else:
+                text = f"🚫{method.title()}" if is_selected else f"—{method.title()}"
+
             method_buttons.append(InlineKeyboardButton(
                 text=text,
                 callback_data=ConvertPanelCallback(action="rub_method", value=method).pack()
@@ -129,8 +167,12 @@ def get_convert_panel_keyboard(state: ConvertState) -> InlineKeyboardMarkup:
         ),
     ])
 
-    # Row 8: Close
+    # Row 8: Options & Close
     rows.append([
+        InlineKeyboardButton(
+            text="📋 /pairs",
+            callback_data=ConvertPanelCallback(action="show_pairs").pack()
+        ),
         InlineKeyboardButton(
             text="❌ Close",
             callback_data=ConvertPanelCallback(action="close").pack()
@@ -140,11 +182,16 @@ def get_convert_panel_keyboard(state: ConvertState) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def render_panel_text(state: ConvertState) -> str:
+def render_panel_text(
+    state: ConvertState,
+    availability: Optional[AvailabilityResult] = None,
+) -> str:
     """
-    Render the panel message text.
+    Render the panel message text with availability status.
 
-    Shows current selection and result if available.
+    Args:
+        state: Current conversion state
+        availability: Availability check result (optional)
     """
     from_code, from_detail = get_display_from(state)
     to_code, to_detail = get_display_to(state)
@@ -166,13 +213,35 @@ def render_panel_text(state: ConvertState) -> str:
 
     lines.append("")
 
+    # Show availability status
+    if availability:
+        if availability.available:
+            lines.append("Status: ✅ Available")
+        else:
+            lines.append(f"Status: ❌ {availability.reason or 'Not available'}")
+            # Show suggestions
+            if availability.suggestions:
+                suggestions_text = " • ".join(s[2] for s in availability.suggestions)
+                lines.append(f"<i>Try: {suggestions_text}</i>")
+
+        # Show adjustment message if auto-fixed
+        if availability.adjusted and availability.adjustment_msg:
+            lines.append(f"<i>Adjusted: {availability.adjustment_msg}</i>")
+
+        lines.append("")
+
     # Show result if available
     if state.last_result:
         lines.append(f"<b>Result: {state.last_result}</b>")
         if state.last_rate:
             lines.append(f"<i>Rate: {state.last_rate}</i>")
     else:
-        lines.append("<i>Tap ✅ Convert to calculate</i>")
+        if availability and availability.available:
+            lines.append("<i>Tap ✅ Convert to calculate</i>")
+        elif availability and not availability.available:
+            lines.append("<i>Select available options above</i>")
+        else:
+            lines.append("<i>Tap ✅ Convert to calculate</i>")
 
     return "\n".join(lines)
 

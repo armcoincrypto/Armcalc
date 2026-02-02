@@ -269,3 +269,267 @@ def cleanup_expired_states() -> int:
     for uid in expired:
         del _user_states[uid]
     return len(expired)
+
+
+# =============================================================================
+# Availability Engine
+# =============================================================================
+
+# Configuration
+AUTO_FIX_UNAVAILABLE = True  # Auto-fix to nearest valid option
+
+
+@dataclass
+class AvailabilityResult:
+    """Result of availability check."""
+
+    available: bool
+    from_xml: str  # Resolved XML code
+    to_xml: str  # Resolved XML code
+    method: Optional[str]
+    reason: Optional[str] = None  # Why not available
+    suggestions: list = field(default_factory=list)  # Suggested fixes
+    adjusted: bool = False  # Was state auto-adjusted?
+    adjustment_msg: Optional[str] = None  # What was adjusted
+
+
+def _build_xml_code(currency: str, state: ConvertState) -> str:
+    """Build XML code for a currency based on state settings."""
+    currency = currency.lower()
+
+    if currency == "usdt":
+        network_map = {
+            "trc20": "USDTTRC20",
+            "bep20": "USDTBEP20",
+            "erc20": "USDTERC20",
+            "ton": "USDTTON",
+            "sol": "USDTSOL",
+        }
+        return network_map.get(state.usdt_network, "USDTTRC20")
+
+    if currency == "amd":
+        return "CASHAMD" if state.amd_unit == "cash" else "CARDAMD"
+
+    if currency == "usd":
+        return "CASHUSD"
+
+    if currency == "rub":
+        method_map = {
+            "sberbank": "SBERRUB",
+            "tinkoff": "TCSBRUB",
+            "alfa": "ACRUB",
+            "vtb": "VTBRUB",
+        }
+        return method_map.get(state.rub_method, "SBERRUB")
+
+    return currency.upper()
+
+
+def check_availability(
+    state: ConvertState,
+    available_pairs: set,  # Set of (from_xml, to_xml) tuples
+) -> AvailabilityResult:
+    """
+    Check if current state configuration is available.
+
+    Args:
+        state: Current conversion state
+        available_pairs: Set of (from_xml, to_xml) tuples from XML
+
+    Returns:
+        AvailabilityResult with status and suggestions
+    """
+    from_xml = _build_xml_code(state.from_code, state)
+    to_xml = _build_xml_code(state.to_code, state)
+    method = state.rub_method if involves_rub(state) else None
+
+    # Check if pair exists
+    pair = (from_xml, to_xml)
+    if pair in available_pairs:
+        return AvailabilityResult(
+            available=True,
+            from_xml=from_xml,
+            to_xml=to_xml,
+            method=method,
+        )
+
+    # Not available - find suggestions
+    suggestions = []
+    reason = f"{from_xml} → {to_xml} not in exchange feed"
+
+    # Try alternative units/networks
+    if state.to_code == "amd":
+        # Try other AMD unit
+        alt_unit = "cash" if state.amd_unit == "card" else "card"
+        alt_to = "CASHAMD" if alt_unit == "cash" else "CARDAMD"
+        if (from_xml, alt_to) in available_pairs:
+            suggestions.append(("amd_unit", alt_unit, f"AMD {alt_unit.title()}"))
+            reason = f"AMD {state.amd_unit.title()} not available"
+
+    if state.from_code == "amd":
+        alt_unit = "cash" if state.amd_unit == "card" else "card"
+        alt_from = "CASHAMD" if alt_unit == "cash" else "CARDAMD"
+        if (alt_from, to_xml) in available_pairs:
+            suggestions.append(("amd_unit", alt_unit, f"AMD {alt_unit.title()}"))
+            reason = f"AMD {state.amd_unit.title()} not available"
+
+    if state.from_code == "usdt":
+        # Try other USDT networks
+        for net in USDT_NETWORKS:
+            if net == state.usdt_network:
+                continue
+            alt_from = f"USDT{net.upper()}"
+            if (alt_from, to_xml) in available_pairs:
+                suggestions.append(("network", net, f"USDT {net.upper()}"))
+                if not reason.startswith("USDT"):
+                    reason = f"USDT {state.usdt_network.upper()} not available"
+
+    if state.to_code == "usdt":
+        for net in USDT_NETWORKS:
+            if net == state.usdt_network:
+                continue
+            alt_to = f"USDT{net.upper()}"
+            if (from_xml, alt_to) in available_pairs:
+                suggestions.append(("network", net, f"USDT {net.upper()}"))
+                if not reason.startswith("USDT"):
+                    reason = f"USDT {state.usdt_network.upper()} not available"
+
+    if state.to_code == "rub":
+        # Try other RUB methods
+        for meth in RUB_METHODS:
+            if meth == state.rub_method:
+                continue
+            method_map = {"sberbank": "SBERRUB", "tinkoff": "TCSBRUB", "alfa": "ACRUB", "vtb": "VTBRUB"}
+            alt_to = method_map.get(meth, "SBERRUB")
+            if (from_xml, alt_to) in available_pairs:
+                suggestions.append(("rub_method", meth, f"RUB {meth.title()}"))
+                reason = f"RUB {state.rub_method.title()} not available"
+
+    if state.from_code == "rub":
+        for meth in RUB_METHODS:
+            if meth == state.rub_method:
+                continue
+            method_map = {"sberbank": "SBERRUB", "tinkoff": "TCSBRUB", "alfa": "ACRUB", "vtb": "VTBRUB"}
+            alt_from = method_map.get(meth, "SBERRUB")
+            if (alt_from, to_xml) in available_pairs:
+                suggestions.append(("rub_method", meth, f"RUB {meth.title()}"))
+                reason = f"RUB {state.rub_method.title()} not available"
+
+    return AvailabilityResult(
+        available=False,
+        from_xml=from_xml,
+        to_xml=to_xml,
+        method=method,
+        reason=reason,
+        suggestions=suggestions[:3],  # Limit to top 3
+    )
+
+
+def auto_fix_state(
+    state: ConvertState,
+    available_pairs: set,
+) -> Tuple[ConvertState, AvailabilityResult]:
+    """
+    Automatically fix state to nearest valid configuration.
+
+    Returns (fixed_state, availability_result with adjusted=True if changed).
+    """
+    result = check_availability(state, available_pairs)
+
+    if result.available or not AUTO_FIX_UNAVAILABLE:
+        return state, result
+
+    # Apply first suggestion
+    if result.suggestions:
+        action, value, display = result.suggestions[0]
+
+        if action == "amd_unit":
+            old_val = state.amd_unit.title()
+            state = set_amd_unit(state, value)
+            result.adjusted = True
+            result.adjustment_msg = f"AMD {old_val} → AMD {value.title()} (not available)"
+
+        elif action == "network":
+            old_val = state.usdt_network.upper()
+            state = set_usdt_network(state, value)
+            result.adjusted = True
+            result.adjustment_msg = f"USDT {old_val} → USDT {value.upper()} (not available)"
+
+        elif action == "rub_method":
+            old_val = state.rub_method.title()
+            state = set_rub_method(state, value)
+            result.adjusted = True
+            result.adjustment_msg = f"RUB {old_val} → RUB {value.title()} (not available)"
+
+        # Re-check after fix
+        new_result = check_availability(state, available_pairs)
+        new_result.adjusted = result.adjusted
+        new_result.adjustment_msg = result.adjustment_msg
+        return state, new_result
+
+    return state, result
+
+
+def get_allowed_options(
+    state: ConvertState,
+    available_pairs: set,
+) -> Dict[str, set]:
+    """
+    Get allowed options for each selector given current state.
+
+    Returns dict with keys: networks, amd_units, rub_methods
+    Each value is a set of allowed values.
+    """
+    allowed = {
+        "networks": set(),
+        "amd_units": set(),
+        "rub_methods": set(),
+    }
+
+    # Check USDT networks
+    if state.from_code == "usdt" or state.to_code == "usdt":
+        for net in USDT_NETWORKS:
+            # Build test codes
+            test_state = ConvertState(
+                from_code=state.from_code,
+                to_code=state.to_code,
+                usdt_network=net,
+                amd_unit=state.amd_unit,
+                rub_method=state.rub_method,
+            )
+            from_xml = _build_xml_code(state.from_code, test_state)
+            to_xml = _build_xml_code(state.to_code, test_state)
+            if (from_xml, to_xml) in available_pairs:
+                allowed["networks"].add(net)
+
+    # Check AMD units
+    if state.from_code == "amd" or state.to_code == "amd":
+        for unit in AMD_UNITS:
+            test_state = ConvertState(
+                from_code=state.from_code,
+                to_code=state.to_code,
+                usdt_network=state.usdt_network,
+                amd_unit=unit,
+                rub_method=state.rub_method,
+            )
+            from_xml = _build_xml_code(state.from_code, test_state)
+            to_xml = _build_xml_code(state.to_code, test_state)
+            if (from_xml, to_xml) in available_pairs:
+                allowed["amd_units"].add(unit)
+
+    # Check RUB methods
+    if state.from_code == "rub" or state.to_code == "rub":
+        for method in RUB_METHODS:
+            test_state = ConvertState(
+                from_code=state.from_code,
+                to_code=state.to_code,
+                usdt_network=state.usdt_network,
+                amd_unit=state.amd_unit,
+                rub_method=method,
+            )
+            from_xml = _build_xml_code(state.from_code, test_state)
+            to_xml = _build_xml_code(state.to_code, test_state)
+            if (from_xml, to_xml) in available_pairs:
+                allowed["rub_methods"].add(method)
+
+    return allowed
