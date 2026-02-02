@@ -1,7 +1,7 @@
 """
 Convert panel inline keyboard.
 
-Provides the interactive UI for currency conversion with availability checking.
+Beautiful clean UI for currency conversion with predefined pairs.
 """
 
 from typing import Dict, Optional, Set
@@ -12,14 +12,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from armcalc.services.convert_state import (
     ConvertState,
     AvailabilityResult,
-    involves_usdt,
-    involves_amd,
-    involves_rub,
-    get_display_from,
-    get_display_to,
-    USDT_NETWORKS,
-    AMD_UNITS,
-    RUB_METHODS,
 )
 
 
@@ -30,124 +22,46 @@ class ConvertPanelCallback(CallbackData, prefix="cvt"):
     value: str = ""
 
 
+# Predefined conversion pairs with display names
+CONVERSION_PAIRS = [
+    # (id, from_code, to_code, display_name, emoji)
+    ("usdt_usd_cash_yerevan", "usdt", "usd_cash_yerevan", "USD Cash Yerevan", "🇦🇲"),
+    ("usdt_amd_cash_yerevan", "usdt", "amd_cash", "AMD Cash Yerevan", "🇦🇲"),
+    ("usdt_usd_cash_la", "usdt", "usd_cash_la", "USD Cash LA", "🇺🇸"),
+    ("usdt_amd_card", "usdt", "amd_card", "AMD Card", "💳"),
+    ("usdt_rub_card", "usdt", "rub_card", "RUB Card", "🇷🇺"),
+    ("usdt_kzt_card", "usdt", "kzt_card", "KZT Card", "🇰🇿"),
+    ("usdt_gel_card", "usdt", "gel_card", "GEL Card", "🇬🇪"),
+    ("usdt_aed_card", "usdt", "aed_card", "AED Card", "🇦🇪"),
+]
+
+
 def get_convert_panel_keyboard(
     state: ConvertState,
     allowed: Optional[Dict[str, Set[str]]] = None,
 ) -> InlineKeyboardMarkup:
     """
-    Build the convert panel keyboard based on current state.
+    Build beautiful convert panel keyboard.
 
     Args:
         state: Current conversion state
-        allowed: Dict with allowed options for networks/amd_units/rub_methods
-                If None, all options are shown as available.
+        allowed: Dict with allowed options (unused in new design)
     """
     rows = []
 
-    # Default to all allowed if not specified
-    if allowed is None:
-        allowed = {
-            "networks": set(USDT_NETWORKS),
-            "amd_units": set(AMD_UNITS),
-            "rub_methods": set(RUB_METHODS),
-        }
-
-    # Row 1: Actions
+    # Header row: Amount display + Edit
     rows.append([
         InlineKeyboardButton(
-            text="✏️ Amount",
+            text=f"💵 {state.amount:,.0f} USDT",
+            callback_data=ConvertPanelCallback(action="show_amount").pack()
+        ),
+        InlineKeyboardButton(
+            text="✏️",
             callback_data=ConvertPanelCallback(action="amount").pack()
-        ),
-        InlineKeyboardButton(
-            text="🔁 Swap",
-            callback_data=ConvertPanelCallback(action="swap").pack()
-        ),
-        InlineKeyboardButton(
-            text="✅ Convert",
-            callback_data=ConvertPanelCallback(action="convert").pack()
         ),
     ])
 
-    # Row 2: From selector
-    from_buttons = []
-    for curr in ["usdt", "amd", "usd", "rub"]:
-        is_selected = state.from_code == curr
-        text = f"{'•' if is_selected else ''}{curr.upper()}"
-        from_buttons.append(InlineKeyboardButton(
-            text=text,
-            callback_data=ConvertPanelCallback(action="from", value=curr).pack()
-        ))
-    rows.append(from_buttons)
-
-    # Row 3: To selector
-    to_buttons = []
-    for curr in ["amd", "usdt", "usd", "rub"]:
-        is_selected = state.to_code == curr
-        text = f"→{'•' if is_selected else ''}{curr.upper()}"
-        to_buttons.append(InlineKeyboardButton(
-            text=text,
-            callback_data=ConvertPanelCallback(action="to", value=curr).pack()
-        ))
-    rows.append(to_buttons)
-
-    # Row 4: USDT Networks (only if USDT involved)
-    if involves_usdt(state):
-        network_buttons = []
-        allowed_nets = allowed.get("networks", set())
-        for net in USDT_NETWORKS:
-            is_selected = state.usdt_network == net
-            is_allowed = net in allowed_nets or not allowed_nets
-
-            if is_allowed:
-                text = f"{'•' if is_selected else ''}{net.upper()}"
-            else:
-                text = f"🚫{net.upper()}" if is_selected else f"—{net.upper()}"
-
-            network_buttons.append(InlineKeyboardButton(
-                text=text,
-                callback_data=ConvertPanelCallback(action="network", value=net).pack()
-            ))
-        rows.append(network_buttons)
-
-    # Row 5: AMD Units (only if AMD involved)
-    if involves_amd(state):
-        unit_buttons = []
-        allowed_units = allowed.get("amd_units", set())
-        for unit in AMD_UNITS:
-            is_selected = state.amd_unit == unit
-            is_allowed = unit in allowed_units or not allowed_units
-
-            if is_allowed:
-                text = f"{'•' if is_selected else ''}{unit.title()}"
-            else:
-                text = f"🚫{unit.title()}" if is_selected else f"—{unit.title()}"
-
-            unit_buttons.append(InlineKeyboardButton(
-                text=text,
-                callback_data=ConvertPanelCallback(action="amd_unit", value=unit).pack()
-            ))
-        rows.append(unit_buttons)
-
-    # Row 6: RUB Methods (only if RUB involved)
-    if involves_rub(state):
-        method_buttons = []
-        allowed_methods = allowed.get("rub_methods", set())
-        for method in RUB_METHODS:
-            is_selected = state.rub_method == method
-            is_allowed = method in allowed_methods or not allowed_methods
-
-            if is_allowed:
-                text = f"{'•' if is_selected else ''}{method.title()}"
-            else:
-                text = f"🚫{method.title()}" if is_selected else f"—{method.title()}"
-
-            method_buttons.append(InlineKeyboardButton(
-                text=text,
-                callback_data=ConvertPanelCallback(action="rub_method", value=method).pack()
-            ))
-        rows.append(method_buttons)
-
-    # Row 7: Quick amounts
+    # Quick amount buttons
     rows.append([
         InlineKeyboardButton(
             text="100",
@@ -158,21 +72,99 @@ def get_convert_panel_keyboard(
             callback_data=ConvertPanelCallback(action="quick_amount", value="500").pack()
         ),
         InlineKeyboardButton(
-            text="1000",
+            text="1K",
             callback_data=ConvertPanelCallback(action="quick_amount", value="1000").pack()
         ),
         InlineKeyboardButton(
-            text="5000",
+            text="5K",
             callback_data=ConvertPanelCallback(action="quick_amount", value="5000").pack()
+        ),
+        InlineKeyboardButton(
+            text="10K",
+            callback_data=ConvertPanelCallback(action="quick_amount", value="10000").pack()
         ),
     ])
 
-    # Row 8: Options & Close
+    # Separator
     rows.append([
         InlineKeyboardButton(
-            text="📋 /pairs",
-            callback_data=ConvertPanelCallback(action="show_pairs").pack()
+            text="━━━━ USDT → ━━━━",
+            callback_data=ConvertPanelCallback(action="noop").pack()
         ),
+    ])
+
+    # Cash section header
+    rows.append([
+        InlineKeyboardButton(
+            text="💵 Cash",
+            callback_data=ConvertPanelCallback(action="noop").pack()
+        ),
+    ])
+
+    # Cash options: 2 per row
+    # Row 1: USD Cash Yerevan, AMD Cash Yerevan
+    rows.append([
+        InlineKeyboardButton(
+            text="🇦🇲 USD Yerevan",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_usd_cash_yerevan").pack()
+        ),
+        InlineKeyboardButton(
+            text="🇦🇲 AMD Yerevan",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_amd_cash_yerevan").pack()
+        ),
+    ])
+
+    # Row 2: USD Cash LA
+    rows.append([
+        InlineKeyboardButton(
+            text="🇺🇸 USD Los Angeles",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_usd_cash_la").pack()
+        ),
+    ])
+
+    # Card section header
+    rows.append([
+        InlineKeyboardButton(
+            text="💳 Card",
+            callback_data=ConvertPanelCallback(action="noop").pack()
+        ),
+    ])
+
+    # Card options: 2 per row
+    # Row 1: AMD Card, RUB Card
+    rows.append([
+        InlineKeyboardButton(
+            text="🇦🇲 AMD",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_amd_card").pack()
+        ),
+        InlineKeyboardButton(
+            text="🇷🇺 RUB",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_rub_card").pack()
+        ),
+    ])
+
+    # Row 2: KZT Card, GEL Card
+    rows.append([
+        InlineKeyboardButton(
+            text="🇰🇿 KZT",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_kzt_card").pack()
+        ),
+        InlineKeyboardButton(
+            text="🇬🇪 GEL",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_gel_card").pack()
+        ),
+    ])
+
+    # Row 3: AED Card
+    rows.append([
+        InlineKeyboardButton(
+            text="🇦🇪 AED",
+            callback_data=ConvertPanelCallback(action="pair", value="usdt_aed_card").pack()
+        ),
+    ])
+
+    # Close button
+    rows.append([
         InlineKeyboardButton(
             text="❌ Close",
             callback_data=ConvertPanelCallback(action="close").pack()
@@ -187,69 +179,57 @@ def render_panel_text(
     availability: Optional[AvailabilityResult] = None,
 ) -> str:
     """
-    Render the panel message text with availability status.
+    Render clean panel message text.
 
     Args:
         state: Current conversion state
         availability: Availability check result (optional)
     """
-    from_code, from_detail = get_display_from(state)
-    to_code, to_detail = get_display_to(state)
-
     # Format amount with thousands separator
-    amount_str = f"{state.amount:,.2f}".rstrip('0').rstrip('.')
+    amount_str = f"{state.amount:,.0f}"
 
     lines = [
-        "💱 <b>Converter</b>",
+        "💱 <b>Exchange USDT</b>",
         "",
-        f"Amount: <b>{amount_str}</b>",
-        f"From: <b>{from_code}</b>" + (f" (<code>{from_detail}</code>)" if from_detail else ""),
-        f"To: <b>{to_code}</b>" + (f" (<code>{to_detail}</code>)" if to_detail else ""),
+        f"Amount: <b>{amount_str} USDT</b>",
+        "",
+        "<i>Select destination below:</i>",
     ]
-
-    # Show RUB method only when RUB is involved
-    if involves_rub(state):
-        lines.append(f"Method: <b>{state.rub_method.title()}</b>")
-
-    lines.append("")
-
-    # Show availability status
-    if availability:
-        if availability.available:
-            lines.append("Status: ✅ Available")
-        else:
-            lines.append(f"Status: ❌ {availability.reason or 'Not available'}")
-            # Show suggestions
-            if availability.suggestions:
-                suggestions_text = " • ".join(s[2] for s in availability.suggestions)
-                lines.append(f"<i>Try: {suggestions_text}</i>")
-
-        # Show adjustment message if auto-fixed
-        if availability.adjusted and availability.adjustment_msg:
-            lines.append(f"<i>Adjusted: {availability.adjustment_msg}</i>")
-
-        lines.append("")
 
     # Show result if available
     if state.last_result:
+        lines.append("")
+        lines.append("━━━━━━━━━━━━━━━━")
         lines.append(f"<b>Result: {state.last_result}</b>")
         if state.last_rate:
-            lines.append(f"<i>Rate: {state.last_rate}</i>")
-    else:
-        if availability and availability.available:
-            lines.append("<i>Tap ✅ Convert to calculate</i>")
-        elif availability and not availability.available:
-            lines.append("<i>Select available options above</i>")
-        else:
-            lines.append("<i>Tap ✅ Convert to calculate</i>")
+            lines.append(f"<i>{state.last_rate}</i>")
 
     return "\n".join(lines)
+
+
+def render_result_panel(
+    amount: str,
+    from_display: str,
+    to_display: str,
+    result: str,
+    rate: str,
+) -> str:
+    """Render conversion result panel."""
+    return (
+        f"💱 <b>Conversion Result</b>\n"
+        f"\n"
+        f"{amount} {from_display}\n"
+        f"      ↓\n"
+        f"<b>{result}</b>\n"
+        f"\n"
+        f"<i>Rate: {rate}</i>"
+    )
 
 
 def render_amount_prompt() -> str:
     """Render the amount input prompt."""
     return (
         "✏️ <b>Enter Amount</b>\n\n"
-        "Send a number (e.g., <code>100</code> or <code>1500.50</code>)\n\n"
-        "<i>Or tap a quick amount button above</i>"
+        "Send a number (e.g., <code>100</code> or <code>5000</code>)\n\n"
+        "<i>Or tap quick amount buttons</i>"
     )

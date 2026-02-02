@@ -511,21 +511,11 @@ async def cmd_convert(message: Message) -> None:
     # If no arguments, show interactive panel
     if len(parts) == 1:
         state = get_user_state(user_id)
-
-        # Get XML service
-        xml_service = get_xml_service()
-        await xml_service.ensure_cache()
-
-        # Check availability and auto-fix if needed (using async version)
-        state, availability = await auto_fix_state_async(state, xml_service)
         save_user_state(user_id, state)
 
-        # Get allowed options for keyboard (using async version)
-        allowed = await get_allowed_options_async(state, xml_service)
-
         await message.answer(
-            render_panel_text(state, availability),
-            reply_markup=get_convert_panel_keyboard(state, allowed),
+            render_panel_text(state, None),
+            reply_markup=get_convert_panel_keyboard(state, None),
             parse_mode="HTML",
         )
         return
@@ -842,13 +832,25 @@ async def cmd_rates(message: Message) -> None:
 # Convert Panel Callback Handlers
 # =============================================================================
 
+# Pair ID to XML lookup mapping
+PAIR_MAPPINGS = {
+    "usdt_usd_cash_yerevan": ("USDT", "CASHUSD", None, "USD Cash Yerevan"),
+    "usdt_amd_cash_yerevan": ("USDT", "CASHAMD", None, "AMD Cash Yerevan"),
+    "usdt_usd_cash_la": ("USDT", "CASHUSD", None, "USD Cash LA"),  # Same rate, different location
+    "usdt_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
+    "usdt_rub_card": ("USDT", "RUB", "sberbank", "RUB Card"),
+    "usdt_kzt_card": ("USDT", "KZT", None, "KZT Card"),
+    "usdt_gel_card": ("USDT", "GEL", None, "GEL Card"),
+    "usdt_aed_card": ("USDT", "AED", None, "AED Card"),
+}
+
 
 @router.callback_query(ConvertPanelCallback.filter())
 async def handle_convert_panel_callback(
     callback: CallbackQuery,
     callback_data: ConvertPanelCallback,
 ) -> None:
-    """Handle convert panel callbacks with availability checking."""
+    """Handle convert panel callbacks - clean new design."""
     user_id = callback.from_user.id if callback.from_user else 0
     action = callback_data.action
     value = callback_data.value
@@ -857,141 +859,81 @@ async def handle_convert_panel_callback(
 
     state = get_user_state(user_id)
 
-    # Get XML service for validation (using async functions)
+    # Get XML service
     xml_service = get_xml_service()
     await xml_service.ensure_cache()
 
+    # Handle noop (section headers)
+    if action == "noop" or action == "show_amount":
+        await callback.answer()
+        return
+
+    # Handle close
     if action == "close":
         clear_user_state(user_id)
         await callback.message.delete()
         await callback.answer("Closed")
         return
 
-    if action == "show_pairs":
-        # Show available pairs info
-        from_code = state.from_code.upper()
-        await callback.answer(f"See /pairs {from_code.lower()} for options", show_alert=False)
-        return
-
-    if action == "swap":
-        state = swap_currencies(state)
-        # Auto-fix after swap if needed
-        state, availability = await auto_fix_state_async(state, xml_service)
-        save_user_state(user_id, state)
-        await callback.answer("Swapped")
-
-    elif action == "from":
-        state = set_from_code(state, value)
-        state, availability = await auto_fix_state_async(state, xml_service)
-        save_user_state(user_id, state)
-        if availability.adjusted:
-            await callback.answer(f"From: {value.upper()} (adjusted)", show_alert=False)
-        else:
-            await callback.answer(f"From: {value.upper()}")
-
-    elif action == "to":
-        state = set_to_code(state, value)
-        state, availability = await auto_fix_state_async(state, xml_service)
-        save_user_state(user_id, state)
-        if availability.adjusted:
-            await callback.answer(f"To: {value.upper()} (adjusted)", show_alert=False)
-        else:
-            await callback.answer(f"To: {value.upper()}")
-
-    elif action == "network":
-        # Check if this network is available
-        allowed = await get_allowed_options_async(state, xml_service)
-        if value not in allowed.get("networks", set()):
-            await callback.answer(f"USDT {value.upper()} not available for this pair", show_alert=True)
-            # Still update to show status
-            state = set_usdt_network(state, value)
-        else:
-            state = set_usdt_network(state, value)
-            await callback.answer(f"Network: {value.upper()}")
-        save_user_state(user_id, state)
-
-    elif action == "amd_unit":
-        # Check if this unit is available
-        allowed = await get_allowed_options_async(state, xml_service)
-        if value not in allowed.get("amd_units", set()):
-            await callback.answer(f"AMD {value.title()} not available for this pair", show_alert=True)
-            state = set_amd_unit(state, value)
-        else:
-            state = set_amd_unit(state, value)
-            await callback.answer(f"AMD: {value.title()}")
-        save_user_state(user_id, state)
-
-    elif action == "rub_method":
-        # Check if this method is available
-        allowed = await get_allowed_options_async(state, xml_service)
-        if value not in allowed.get("rub_methods", set()):
-            await callback.answer(f"RUB {value.title()} not available for this pair", show_alert=True)
-            state = set_rub_method(state, value)
-        else:
-            state = set_rub_method(state, value)
-            await callback.answer(f"RUB: {value.title()}")
-        save_user_state(user_id, state)
-
-    elif action == "quick_amount":
+    # Handle quick amount
+    if action == "quick_amount":
         state, error = set_amount(state, value)
         if error:
             await callback.answer(error, show_alert=True)
             return
+        state.last_result = None  # Clear result when amount changes
         save_user_state(user_id, state)
-        await callback.answer(f"Amount: {value}")
+        await callback.answer(f"{value} USDT")
 
-    elif action == "amount":
-        await callback.answer("Send amount as a message", show_alert=False)
-        availability = await check_availability_async(state, xml_service)
-        allowed = await get_allowed_options_async(state, xml_service)
+        # Update panel
         try:
             await callback.message.edit_text(
-                render_panel_text(state, availability) + "\n\n✏️ <i>Send amount as a message...</i>",
-                reply_markup=get_convert_panel_keyboard(state, allowed),
+                render_panel_text(state, None),
+                reply_markup=get_convert_panel_keyboard(state, None),
                 parse_mode="HTML",
             )
         except Exception:
             pass
         return
 
-    elif action == "convert":
-        # Check availability before converting (using xml_service.get_rate directly)
-        availability = await check_availability_async(state, xml_service)
-
-        if not availability.available:
-            await callback.answer(
-                f"Not available: {availability.reason or 'Select valid options'}",
-                show_alert=True
+    # Handle amount edit prompt
+    if action == "amount":
+        await callback.answer("Type amount in chat", show_alert=False)
+        try:
+            await callback.message.edit_text(
+                render_panel_text(state, None) + "\n\n✏️ <i>Type amount in chat...</i>",
+                reply_markup=get_convert_panel_keyboard(state, None),
+                parse_mode="HTML",
             )
-            # Update panel to show status
-            allowed = await get_allowed_options_async(state, xml_service)
-            try:
-                await callback.message.edit_text(
-                    render_panel_text(state, availability),
-                    reply_markup=get_convert_panel_keyboard(state, allowed),
-                    parse_mode="HTML",
-                )
-            except Exception:
-                pass
+        except Exception:
+            pass
+        return
+
+    # Handle pair conversion
+    if action == "pair":
+        pair_id = value
+        if pair_id not in PAIR_MAPPINGS:
+            await callback.answer("Unknown pair", show_alert=True)
             return
 
-        await callback.answer("Converting...")
+        from_code, to_code, method, display_name = PAIR_MAPPINGS[pair_id]
 
-        # Use the same lookup that availability used - get_rate with user-friendly codes
-        method = state.rub_method if state.from_code == "rub" or state.to_code == "rub" else None
-        rate_quote = await xml_service.get_rate(state.from_code, state.to_code, method)
+        await callback.answer(f"Converting to {display_name}...")
+
+        # Get rate and convert
+        rate_quote = await xml_service.get_rate(from_code, to_code, method)
 
         if rate_quote:
             result_amount = rate_quote.convert(state.amount)
 
             # Format result
             to_upper = rate_quote.to_code.upper()
-            if "AMD" in to_upper or "RUB" in to_upper:
-                result_str = f"{result_amount:,.0f} {rate_quote.display_to}"
+            if "AMD" in to_upper or "RUB" in to_upper or "KZT" in to_upper or "GEL" in to_upper or "AED" in to_upper:
+                result_str = f"{result_amount:,.0f} {display_name}"
             else:
-                result_str = f"{result_amount:,.2f} {rate_quote.display_to}"
+                result_str = f"{result_amount:,.2f} {display_name}"
 
-            rate_str = f"1 {rate_quote.display_from} = {rate_quote.rate:.4f} {rate_quote.display_to}"
+            rate_str = f"1 USDT = {rate_quote.rate:.2f} {to_code}"
 
             state = set_result(state, result_str, rate_str)
             save_user_state(user_id, state)
@@ -1000,35 +942,24 @@ async def handle_convert_panel_callback(
             history = get_history_store()
             history.add_entry(
                 user_id,
-                f"{state.amount} {rate_quote.display_from} -> {rate_quote.display_to}",
+                f"{state.amount} USDT -> {display_name}",
                 result_str,
                 "convert",
             )
         else:
-            # Fallback to FX service
-            fx_service = get_fx_service()
-            result = await fx_service.convert(float(state.amount), state.from_code.upper(), state.to_code.upper())
+            state = set_result(state, f"{display_name} - not available", "")
+            save_user_state(user_id, state)
 
-            if result:
-                state = set_result(state, result.formatted, f"1 {state.from_code.upper()} = {result.rate:.4f} {state.to_code.upper()}")
-                save_user_state(user_id, state)
-            else:
-                state = set_result(state, "Pair not available", "")
-                save_user_state(user_id, state)
-
-    # Update panel display with availability status
-    availability = await check_availability_async(state, xml_service)
-    allowed = await get_allowed_options_async(state, xml_service)
-
-    try:
-        await callback.message.edit_text(
-            render_panel_text(state, availability),
-            reply_markup=get_convert_panel_keyboard(state, allowed),
-            parse_mode="HTML",
-        )
-    except Exception:
-        pass  # Message unchanged
-
+        # Update panel with result
+        try:
+            await callback.message.edit_text(
+                render_panel_text(state, None),
+                reply_markup=get_convert_panel_keyboard(state, None),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        return
 
 # =============================================================================
 # Convert Panel Amount Input Handler
@@ -1086,18 +1017,12 @@ async def handle_convert_amount_input(message: Message) -> None:
         await message.answer(f"❌ {error}")
         return
 
+    state.last_result = None  # Clear result when amount changes
     save_user_state(user_id, state)
-
-    # Get XML service and check availability
-    xml_service = get_xml_service()
-    await xml_service.ensure_cache()
-
-    availability = await check_availability_async(state, xml_service)
-    allowed = await get_allowed_options_async(state, xml_service)
 
     # Send updated panel
     await message.answer(
-        render_panel_text(state, availability),
-        reply_markup=get_convert_panel_keyboard(state, allowed),
+        render_panel_text(state, None),
+        reply_markup=get_convert_panel_keyboard(state, None),
         parse_mode="HTML",
     )
