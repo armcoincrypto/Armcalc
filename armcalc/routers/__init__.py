@@ -11,14 +11,18 @@ from .debug import router as debug_router
 
 
 def get_all_routers() -> list[Router]:
-    """Get all routers for registration."""
+    """Get all routers for registration.
+
+    ORDER MATTERS: Command routers (convert, debug) must come BEFORE
+    calc_router which has a catch-all text handler.
+    """
     return [
         start_router,
         help_router,
-        calc_router,
-        inline_router,
-        convert_router,
-        debug_router,
+        convert_router,  # Commands: /convert, /price, /pairs, /rates
+        debug_router,    # Commands: /debug
+        calc_router,     # Commands + catch-all text handler (MUST be last)
+        inline_router,   # Inline queries
     ]
 
 

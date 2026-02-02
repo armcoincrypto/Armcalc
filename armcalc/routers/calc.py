@@ -24,11 +24,14 @@ async def cmd_keyboard(message: Message) -> None:
     """Show calculator keyboard."""
     user_id = message.from_user.id if message.from_user else 0
     _user_expressions[user_id] = ""
+    logger.info(f"/keyboard from user {user_id}")
 
     await message.answer(
-        "🧮 **Calculator**\n\nExpression: `_`\n\nUse the buttons below:",
+        "🧮 <b>Calculator</b>\n\n"
+        "Expression: <code>_</code>\n\n"
+        "Tap buttons to build expression:",
         reply_markup=get_calc_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -41,6 +44,8 @@ async def handle_calc_callback(
     user_id = callback.from_user.id if callback.from_user else 0
     action = callback_data.action
     value = callback_data.value
+
+    logger.debug(f"Calc callback: user={user_id}, action={action}, value={value}")
 
     # Get current expression
     expr = _user_expressions.get(user_id, "")
@@ -57,7 +62,7 @@ async def handle_calc_callback(
 
     elif action == "back":
         expr = expr[:-1] if expr else ""
-        await callback.answer()
+        await callback.answer("⌫")
 
     elif action in ("digit", "op", "func"):
         expr += value
@@ -72,13 +77,14 @@ async def handle_calc_callback(
                 # Save to history
                 history = get_history_store()
                 history.add_entry(user_id, expr, result.formatted, "calc")
+                logger.info(f"Calc keyboard: '{expr}' = {result.formatted}")
 
                 await callback.message.edit_text(
-                    f"🧮 **Calculator**\n\n"
-                    f"`{expr}` = **{result.formatted}**\n\n"
-                    f"Expression: `_`",
+                    f"🧮 <b>Calculator</b>\n\n"
+                    f"<code>{expr}</code> = <b>{result.formatted}</b>\n\n"
+                    f"Expression: <code>_</code>",
                     reply_markup=get_calc_keyboard(),
-                    parse_mode="Markdown",
+                    parse_mode="HTML",
                 )
                 expr = ""
             else:
@@ -94,9 +100,11 @@ async def handle_calc_callback(
 
     try:
         await callback.message.edit_text(
-            f"🧮 **Calculator**\n\nExpression: `{display_expr}`\n\nUse the buttons below:",
+            f"🧮 <b>Calculator</b>\n\n"
+            f"Expression: <code>{display_expr}</code>\n\n"
+            f"Tap buttons to build expression:",
             reply_markup=get_calc_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     except Exception:
         pass  # Message unchanged
@@ -106,6 +114,8 @@ async def handle_calc_callback(
 async def cmd_history(message: Message) -> None:
     """Show calculation history."""
     user_id = message.from_user.id if message.from_user else 0
+    logger.info(f"/history from user {user_id}")
+
     history = get_history_store()
     entries = history.get_history(user_id)
 
@@ -113,12 +123,12 @@ async def cmd_history(message: Message) -> None:
         await message.answer("No history yet. Start calculating!")
         return
 
-    lines = ["📊 **Your Last Calculations:**\n"]
+    lines = ["📊 <b>Your Last Calculations:</b>\n"]
     for i, entry in enumerate(entries, 1):
-        lines.append(f"{i}. `{entry.expression}` = {entry.result}")
-        lines.append(f"   _{entry.formatted_time}_\n")
+        lines.append(f"{i}. <code>{entry.expression}</code> = {entry.result}")
+        lines.append(f"   <i>{entry.formatted_time}</i>\n")
 
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("clear_history"))

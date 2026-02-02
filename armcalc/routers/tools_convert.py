@@ -111,26 +111,47 @@ def parse_convert_args(parts: list[str]) -> Tuple[Optional[Decimal], str, str, O
     """
     Parse /convert command arguments.
 
-    Supports patterns:
+    Supports natural patterns:
     - /convert 100 usd amd
     - /convert 100 usdt amd
+    - /convert 100 usdt -> amd
+    - /convert 100 usdt to amd
+    - /convert 100 usdt/amd
     - /convert 100 usdt sberbank rub
     - /convert 100 usdt rub sberbank
     - /convert 100 usdt sberbank_rub
 
     Returns (amount, from_curr, to_curr, method)
     """
-    if len(parts) < 4:
+    if len(parts) < 2:
         return (None, "", "", None)
 
-    amount = parse_decimal(parts[1])
+    # Clean and normalize tokens
+    # Remove arrows and separators, handle "usdt/amd" format
+    cleaned = []
+    for p in parts[1:]:  # Skip command
+        # Handle "usdt/amd" or "usdt->amd" in single token
+        p = p.replace("->", " ").replace("→", " ").replace("/", " ")
+        for token in p.split():
+            token = token.strip().lower()
+            # Skip filler words
+            if token in ("to", "->", "→", "=", "in"):
+                continue
+            if token:
+                cleaned.append(token)
+
+    if len(cleaned) < 3:
+        return (None, "", "", None)
+
+    # First token should be amount
+    amount = parse_decimal(cleaned[0])
     if amount is None:
         return (None, "", "", None)
 
-    from_curr = parts[2].upper()
+    from_curr = cleaned[1].upper()
 
     # Remaining parts are the target
-    to_parts = parts[3:]
+    to_parts = cleaned[2:]
 
     # Detect RUB method in target
     to_curr, method = detect_rub_method(to_parts)
@@ -208,31 +229,25 @@ async def cmd_convert(message: Message) -> None:
     """
     Convert between currencies.
 
-    Usage:
-    - /convert 100 usd amd
-    - /convert 100 usdt amd
-    - /convert 100 amd usdt
-    - /convert 100 usdt sberbank rub
-    - /convert 100 usdt rub sberbank
-    - /convert 100 usdt sberbank_rub
-
+    Supports natural input patterns.
     Some pairs use exchanger XML rates (AMD<->USDT, USD<->USDT, RUB methods).
     """
     if not message.text:
         return
 
+    user_id = message.from_user.id if message.from_user else 0
     parts = message.text.split()
+    logger.info(f"/convert from user {user_id}: {message.text}")
 
     if len(parts) < 4:
-        settings = get_settings()
         await message.answer(
-            "Usage: <code>/convert 100 usd amd</code>\n\n"
+            "💱 <b>Convert Currency</b>\n\n"
             "<b>Examples:</b>\n"
-            "• <code>/convert 100 usdt amd</code>\n"
-            "• <code>/convert 100 amd usdt</code>\n"
-            "• <code>/convert 100 usdt sberbank rub</code>\n\n"
-            f"<b>RUB methods:</b> sberbank, tinkoff, alfa, vtb\n"
-            f"Default: {settings.default_rub_method}",
+            "<code>/convert 100 usdt amd</code>\n"
+            "<code>/convert 50000 amd usdt</code>\n"
+            "<code>/convert 100 usdt sberbank rub</code>\n\n"
+            "<b>Defaults:</b> USDT=TRC20, AMD=Cash, RUB=Sberbank\n"
+            "<i>See /pairs for other options</i>",
             parse_mode="HTML",
         )
         return
@@ -364,7 +379,9 @@ async def cmd_pairs(message: Message) -> None:
     if not message.text:
         return
 
+    user_id = message.from_user.id if message.from_user else 0
     parts = message.text.split()
+    logger.info(f"/pairs from user {user_id}, args: {parts[1:] if len(parts) > 1 else 'none'}")
 
     xml_service = get_xml_service()
     await message.bot.send_chat_action(message.chat.id, "typing")
@@ -484,6 +501,9 @@ async def cmd_rates(message: Message) -> None:
     """
     if not message.text:
         return
+
+    user_id = message.from_user.id if message.from_user else 0
+    logger.info(f"/rates from user {user_id}")
 
     xml_service = get_xml_service()
 
