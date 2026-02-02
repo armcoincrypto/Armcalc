@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 
 from armcalc.services.price_service import get_price_service
 from armcalc.services.fx_service import get_fx_service, ConversionResult
@@ -14,6 +14,25 @@ from armcalc.services.exswaping_xml_service import (
     RUB_METHOD_ALIASES,
 )
 from armcalc.services.history_store import get_history_store
+from armcalc.services.convert_state import (
+    get_user_state,
+    save_user_state,
+    clear_user_state,
+    set_amount,
+    set_from_code,
+    set_to_code,
+    swap_currencies,
+    set_usdt_network,
+    set_amd_unit,
+    set_rub_method,
+    set_result,
+    get_xml_codes,
+)
+from armcalc.keyboards.convert_panel import (
+    ConvertPanelCallback,
+    get_convert_panel_keyboard,
+    render_panel_text,
+)
 from armcalc.config import get_settings
 from armcalc.utils.logging import get_logger
 
@@ -229,8 +248,8 @@ async def cmd_convert(message: Message) -> None:
     """
     Convert between currencies.
 
-    Supports natural input patterns.
-    Some pairs use exchanger XML rates (AMD<->USDT, USD<->USDT, RUB methods).
+    - With args: text-based conversion (e.g., /convert 100 usdt amd)
+    - Without args: interactive panel UI
     """
     if not message.text:
         return
@@ -239,6 +258,17 @@ async def cmd_convert(message: Message) -> None:
     parts = message.text.split()
     logger.info(f"/convert from user {user_id}: {message.text}")
 
+    # If no arguments, show interactive panel
+    if len(parts) == 1:
+        state = get_user_state(user_id)
+        await message.answer(
+            render_panel_text(state),
+            reply_markup=get_convert_panel_keyboard(state),
+            parse_mode="HTML",
+        )
+        return
+
+    # If insufficient args for text conversion, show help
     if len(parts) < 4:
         await message.answer(
             "💱 <b>Convert Currency</b>\n\n"
@@ -247,7 +277,7 @@ async def cmd_convert(message: Message) -> None:
             "<code>/convert 50000 amd usdt</code>\n"
             "<code>/convert 100 usdt sberbank rub</code>\n\n"
             "<b>Defaults:</b> USDT=TRC20, AMD=Cash, RUB=Sberbank\n"
-            "<i>See /pairs for other options</i>",
+            "<i>Or use /convert for interactive panel</i>",
             parse_mode="HTML",
         )
         return
@@ -544,3 +574,140 @@ async def cmd_rates(message: Message) -> None:
             lines.append(f"  {crypto}: {d.rate:.2f} USDT")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+# =============================================================================
+# Convert Panel Callback Handlers
+# =============================================================================
+
+
+@router.callback_query(ConvertPanelCallback.filter())
+async def handle_convert_panel_callback(
+    callback: CallbackQuery,
+    callback_data: ConvertPanelCallback,
+) -> None:
+    """Handle convert panel callbacks."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    action = callback_data.action
+    value = callback_data.value
+
+    logger.debug(f"Convert panel: user={user_id}, action={action}, value={value}")
+
+    state = get_user_state(user_id)
+
+    if action == "close":
+        clear_user_state(user_id)
+        await callback.message.delete()
+        await callback.answer("Closed")
+        return
+
+    if action == "swap":
+        state = swap_currencies(state)
+        save_user_state(user_id, state)
+        await callback.answer("Swapped")
+
+    elif action == "from":
+        state = set_from_code(state, value)
+        save_user_state(user_id, state)
+        await callback.answer(f"From: {value.upper()}")
+
+    elif action == "to":
+        state = set_to_code(state, value)
+        save_user_state(user_id, state)
+        await callback.answer(f"To: {value.upper()}")
+
+    elif action == "network":
+        state = set_usdt_network(state, value)
+        save_user_state(user_id, state)
+        await callback.answer(f"Network: {value.upper()}")
+
+    elif action == "amd_unit":
+        state = set_amd_unit(state, value)
+        save_user_state(user_id, state)
+        await callback.answer(f"AMD: {value.title()}")
+
+    elif action == "rub_method":
+        state = set_rub_method(state, value)
+        save_user_state(user_id, state)
+        await callback.answer(f"RUB: {value.title()}")
+
+    elif action == "quick_amount":
+        state, error = set_amount(state, value)
+        if error:
+            await callback.answer(error, show_alert=True)
+            return
+        save_user_state(user_id, state)
+        await callback.answer(f"Amount: {value}")
+
+    elif action == "amount":
+        # Just acknowledge, user needs to type amount
+        await callback.answer("Send amount as a message", show_alert=False)
+        # Update panel with prompt
+        try:
+            await callback.message.edit_text(
+                render_panel_text(state) + "\n\n✏️ <i>Send amount as a message...</i>",
+                reply_markup=get_convert_panel_keyboard(state),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        return
+
+    elif action == "convert":
+        # Perform conversion
+        await callback.answer("Converting...")
+
+        xml_service = get_xml_service()
+        from_code, to_code, method = get_xml_codes(state)
+
+        # Check if XML pair
+        if xml_service.is_xml_pair(from_code, to_code, method):
+            rate_quote = await xml_service.get_rate(from_code, to_code, method)
+
+            if rate_quote:
+                result_amount = rate_quote.convert(state.amount)
+
+                # Format result
+                to_upper = rate_quote.to_code.upper()
+                if "AMD" in to_upper or "RUB" in to_upper:
+                    result_str = f"{result_amount:,.0f} {rate_quote.display_to}"
+                else:
+                    result_str = f"{result_amount:,.2f} {rate_quote.display_to}"
+
+                rate_str = f"1 {rate_quote.display_from} = {rate_quote.rate:.4f} {rate_quote.display_to}"
+
+                state = set_result(state, result_str, rate_str)
+                save_user_state(user_id, state)
+
+                # Save to history
+                history = get_history_store()
+                history.add_entry(
+                    user_id,
+                    f"{state.amount} {rate_quote.display_from} -> {rate_quote.display_to}",
+                    result_str,
+                    "convert",
+                )
+            else:
+                state = set_result(state, "Rate not available", "")
+                save_user_state(user_id, state)
+        else:
+            # Try FX service fallback
+            fx_service = get_fx_service()
+            result = await fx_service.convert(float(state.amount), from_code, to_code)
+
+            if result:
+                state = set_result(state, result.formatted, f"1 {from_code} = {result.rate:.4f} {to_code}")
+                save_user_state(user_id, state)
+            else:
+                state = set_result(state, "Pair not available", "")
+                save_user_state(user_id, state)
+
+    # Update panel display
+    try:
+        await callback.message.edit_text(
+            render_panel_text(state),
+            reply_markup=get_convert_panel_keyboard(state),
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass  # Message unchanged
