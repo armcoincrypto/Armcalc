@@ -833,11 +833,12 @@ async def cmd_rates(message: Message) -> None:
 # =============================================================================
 
 # Pair ID to XML lookup mapping: (from_code, to_code, method, display_name)
+# Use simple codes - xml_service.get_rate() will normalize them
 PAIR_MAPPINGS = {
     # ═══ SELL USDT (USDT → ...) ═══
-    "usdt_to_usd_cash": ("USDT", "CASHUSD", None, "USD Cash"),
-    "usdt_to_amd_cash": ("USDT", "CASHAMD", None, "AMD Cash"),
-    "usdt_to_usd_la": ("USDT", "CASHUSD", None, "USD Cash LA"),
+    "usdt_to_usd_cash": ("USDT", "USD", None, "USD Cash"),
+    "usdt_to_amd_cash": ("USDT", "AMD", None, "AMD Cash"),
+    "usdt_to_usd_la": ("USDT", "USD", None, "USD Cash LA"),
     "usdt_to_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
     "usdt_to_rub_card": ("USDT", "RUB", "sberbank", "RUB Card"),
     "usdt_to_kzt_card": ("USDT", "KZT", None, "KZT Card"),
@@ -845,8 +846,8 @@ PAIR_MAPPINGS = {
     "usdt_to_aed_card": ("USDT", "AED", None, "AED Card"),
 
     # ═══ BUY USDT (... → USDT) ═══
-    "usd_cash_to_usdt": ("CASHUSD", "USDT", None, "USDT"),
-    "amd_cash_to_usdt": ("CASHAMD", "USDT", None, "USDT"),
+    "usd_cash_to_usdt": ("USD", "USDT", None, "USDT"),
+    "amd_cash_to_usdt": ("AMD", "USDT", None, "USDT"),
     "rub_to_usdt": ("RUB", "USDT", "sberbank", "USDT"),
 }
 
