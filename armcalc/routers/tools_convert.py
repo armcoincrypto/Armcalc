@@ -48,11 +48,65 @@ async def _get_available_pairs(xml_service) -> set:
     Get set of available (from_xml, to_xml) pairs from XML service.
 
     Returns set of tuples for fast lookup.
+    Includes both raw codes and normalized variants for matching.
     """
     directions = await xml_service.list_directions()
     pairs = set()
+
+    # Mapping from generic codes to specific variants
+    usdt_nets = ["USDTTRC20", "USDTBEP20", "USDTERC20"]
+    amd_units = ["CASHAMD", "CARDAMD"]
+    usd_units = ["CASHUSD"]
+    rub_methods = ["SBERRUB", "TCSBRUB", "ACRUB", "VTBRUB"]
+
     for d in directions:
-        pairs.add((d.from_code, d.to_code))
+        from_code = d.from_code.upper()
+        to_code = d.to_code.upper()
+
+        # Add raw pair
+        pairs.add((from_code, to_code))
+
+        # If from code is USDT (any variant), add all USDT normalized forms
+        if from_code.startswith("USDT"):
+            for net in usdt_nets:
+                pairs.add((net, to_code))
+                # Also add combinations with to_code variants
+                if to_code.endswith("AMD") or to_code == "AMD":
+                    for unit in amd_units:
+                        pairs.add((net, unit))
+                if to_code.endswith("USD") or to_code == "USD":
+                    for unit in usd_units:
+                        pairs.add((net, unit))
+                if to_code.endswith("RUB") or to_code == "RUB":
+                    for meth in rub_methods:
+                        pairs.add((net, meth))
+
+        # If to code is USDT (any variant), add all USDT normalized forms
+        if to_code.startswith("USDT"):
+            for net in usdt_nets:
+                pairs.add((from_code, net))
+                # Also add combinations with from_code variants
+                if from_code.endswith("AMD") or from_code == "AMD":
+                    for unit in amd_units:
+                        pairs.add((unit, net))
+                if from_code.endswith("USD") or from_code == "USD":
+                    for unit in usd_units:
+                        pairs.add((unit, net))
+
+        # Generic AMD/USD variants
+        if from_code == "AMD" or from_code.endswith("AMD"):
+            for unit in amd_units:
+                pairs.add((unit, to_code))
+        if to_code == "AMD" or to_code.endswith("AMD"):
+            for unit in amd_units:
+                pairs.add((from_code, unit))
+        if from_code == "USD" or from_code.endswith("USD"):
+            for unit in usd_units:
+                pairs.add((unit, to_code))
+        if to_code == "USD" or to_code.endswith("USD"):
+            for unit in usd_units:
+                pairs.add((from_code, unit))
+
     return pairs
 
 
