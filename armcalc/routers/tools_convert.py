@@ -931,7 +931,8 @@ async def handle_convert_panel_callback(
         from_code, to_code, method, display_name = PAIR_MAPPINGS[pair_id]
 
         # Determine if this is "Sell USDT" or "Buy USDT"
-        is_sell_usdt = from_code == "USDT"
+        # Check if from_code starts with USDT (covers USDTTRC20, USDTERC20, etc.)
+        is_sell_usdt = from_code.upper().startswith("USDT")
 
         await callback.answer("Converting...")
 
@@ -943,20 +944,21 @@ async def handle_convert_panel_callback(
 
             # Format based on direction
             if is_sell_usdt:
-                # Sell USDT: "100 USDT → 37,500 AMD Cash"
+                # Sell USDT: "100 USDT → 37,500 AMD Card"
                 amount_str = f"{state.amount:,.0f} USDT"
-                to_upper = rate_quote.to_code.upper()
+                to_upper = to_code.upper()
                 if "AMD" in to_upper or "RUB" in to_upper or "KZT" in to_upper or "GEL" in to_upper or "AED" in to_upper:
                     result_str = f"{amount_str} → {result_amount:,.0f} {display_name}"
                 else:
                     result_str = f"{amount_str} → {result_amount:,.2f} {display_name}"
                 rate_str = f"1 USDT = {rate_quote.rate:.2f} {display_name}"
             else:
-                # Buy USDT: "100 USD → 99.80 USDT"
-                from_display = from_code.replace("CASH", "").replace("CARD", " Card ")
+                # Buy USDT: "100,000 AMD → 256.41 USDT"
+                # Clean up from_code for display
+                from_display = from_code.replace("CASH", "").replace("SBER", "Sber ")
                 amount_str = f"{state.amount:,.0f} {from_display}"
                 result_str = f"{amount_str} → {result_amount:,.2f} USDT"
-                rate_str = f"1 {from_display} = {rate_quote.rate:.4f} USDT"
+                rate_str = f"{rate_quote.rate:.0f} {from_display} = 1 USDT"
 
             state = set_result(state, result_str, rate_str)
             save_user_state(user_id, state)
