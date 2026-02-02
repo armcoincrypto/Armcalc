@@ -833,22 +833,27 @@ async def cmd_rates(message: Message) -> None:
 # =============================================================================
 
 # Pair ID to XML lookup mapping: (from_code, to_code, method, display_name)
-# Use simple codes - xml_service.get_rate() will normalize them
+# Use specific XML codes for each location/type
 PAIR_MAPPINGS = {
-    # ═══ SELL USDT (USDT → ...) ═══
-    "usdt_to_usd_cash": ("USDT", "USD", None, "USD Cash"),
-    "usdt_to_amd_cash": ("USDT", "AMD", None, "AMD Cash"),
-    "usdt_to_usd_la": ("USDT", "USD", None, "USD Cash LA"),
-    "usdt_to_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
-    "usdt_to_rub_card": ("USDT", "RUB", "sberbank", "RUB Card"),
-    "usdt_to_kzt_card": ("USDT", "KZT", None, "KZT Card"),
-    "usdt_to_gel_card": ("USDT", "GEL", None, "GEL Card"),
-    "usdt_to_aed_card": ("USDT", "AED", None, "AED Card"),
+    # ═══ USDT → CASH ═══
+    "usdt_to_usd_evn": ("USDT", "CASHUSDEVN", None, "USD Cash Yerevan"),
+    "usdt_to_amd_evn": ("USDT", "CASHAMDEVN", None, "AMD Cash Yerevan"),
+    "usdt_to_usd_la": ("USDT", "CASHUSDLA", None, "USD Cash LA"),
 
-    # ═══ BUY USDT (... → USDT) ═══
-    "usd_cash_to_usdt": ("USD", "USDT", None, "USDT"),
-    "amd_cash_to_usdt": ("AMD", "USDT", None, "USDT"),
-    "rub_to_usdt": ("RUB", "USDT", "sberbank", "USDT"),
+    # ═══ USDT → CARD ═══
+    "usdt_to_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
+    "usdt_to_rub_card": ("USDT", "CARDRUB", None, "RUB Card"),
+    "usdt_to_kzt_card": ("USDT", "CARDKZT", None, "KZT Card"),
+    "usdt_to_gel_card": ("USDT", "CARDGEL", None, "GEL Card"),
+    "usdt_to_aed_card": ("USDT", "CARDAED", None, "AED Card"),
+
+    # ═══ CASH → USDT ═══
+    "amd_evn_to_usdt": ("CASHAMDEVN", "USDT", None, "USDT"),
+    "usd_evn_to_usdt": ("CASHUSDEVN", "USDT", None, "USDT"),
+    "usd_la_to_usdt": ("CASHUSDLA", "USDT", None, "USDT"),
+
+    # ═══ CARD → USDT ═══
+    "rub_card_to_usdt": ("CARDRUB", "USDT", None, "USDT"),
 }
 
 
