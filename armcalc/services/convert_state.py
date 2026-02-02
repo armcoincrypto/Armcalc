@@ -263,6 +263,12 @@ def clear_user_state(user_id: int) -> None:
     _user_states.pop(user_id, None)
 
 
+def has_active_state(user_id: int) -> bool:
+    """Check if user has an active (non-expired) convert panel state."""
+    state = _user_states.get(user_id)
+    return state is not None and not state.is_expired()
+
+
 def cleanup_expired_states() -> int:
     """Remove expired states. Returns count of removed states."""
     expired = [uid for uid, state in _user_states.items() if state.is_expired()]

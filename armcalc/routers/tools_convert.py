@@ -18,6 +18,7 @@ from armcalc.services.convert_state import (
     get_user_state,
     save_user_state,
     clear_user_state,
+    has_active_state,
     set_amount,
     set_from_code,
     set_to_code,
@@ -1027,3 +1028,76 @@ async def handle_convert_panel_callback(
         )
     except Exception:
         pass  # Message unchanged
+
+
+# =============================================================================
+# Convert Panel Amount Input Handler
+# =============================================================================
+
+
+def _looks_like_number(text: str) -> bool:
+    """Check if text looks like a number (for amount input)."""
+    if not text:
+        return False
+    # Clean and check
+    cleaned = text.replace(",", "").replace(" ", "").strip()
+    if not cleaned:
+        return False
+    # Must start with digit or decimal
+    if not (cleaned[0].isdigit() or cleaned[0] == "."):
+        return False
+    # Try to parse
+    try:
+        val = float(cleaned)
+        return val > 0 and val < 1_000_000_000
+    except ValueError:
+        return False
+
+
+@router.message()
+async def handle_convert_amount_input(message: Message) -> None:
+    """
+    Handle numeric input when user has active convert panel.
+
+    This allows users to type amounts directly instead of using buttons.
+    Only activates when user has an active (non-expired) convert state.
+    """
+    if not message.text:
+        return
+
+    user_id = message.from_user.id if message.from_user else 0
+
+    # Only handle if user has active convert panel
+    if not has_active_state(user_id):
+        return
+
+    text = message.text.strip()
+
+    # Only handle if it looks like a number
+    if not _looks_like_number(text):
+        return
+
+    logger.debug(f"Convert amount input: user={user_id}, text={text}")
+
+    state = get_user_state(user_id)
+    state, error = set_amount(state, text)
+
+    if error:
+        await message.answer(f"❌ {error}")
+        return
+
+    save_user_state(user_id, state)
+
+    # Get XML service and check availability
+    xml_service = get_xml_service()
+    await xml_service.ensure_cache()
+
+    availability = await check_availability_async(state, xml_service)
+    allowed = await get_allowed_options_async(state, xml_service)
+
+    # Send updated panel
+    await message.answer(
+        render_panel_text(state, availability),
+        reply_markup=get_convert_panel_keyboard(state, allowed),
+        parse_mode="HTML",
+    )
