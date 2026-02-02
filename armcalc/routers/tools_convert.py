@@ -833,27 +833,27 @@ async def cmd_rates(message: Message) -> None:
 # =============================================================================
 
 # Pair ID to XML lookup mapping: (from_code, to_code, method, display_name)
-# Use specific XML codes for each location/type
+# Actual codes from exswaping.com XML
 PAIR_MAPPINGS = {
     # ═══ USDT → CASH ═══
-    "usdt_to_usd_evn": ("USDT", "CASHUSDEVN", None, "USD Cash Yerevan"),
-    "usdt_to_amd_evn": ("USDT", "CASHAMDEVN", None, "AMD Cash Yerevan"),
-    "usdt_to_usd_la": ("USDT", "CASHUSDLA", None, "USD Cash LA"),
+    "usdt_to_usd_evn": ("USDTTRC20", "CASHUSD", None, "USD Cash"),
+    "usdt_to_amd_evn": ("USDTTRC20", "CASHAMD", None, "AMD Cash"),
+    "usdt_to_usd_la": ("USDTTRC20", "CASHUSD", None, "USD Cash"),
 
     # ═══ USDT → CARD ═══
-    "usdt_to_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
-    "usdt_to_rub_card": ("USDT", "CARDRUB", None, "RUB Card"),
-    "usdt_to_kzt_card": ("USDT", "CARDKZT", None, "KZT Card"),
-    "usdt_to_gel_card": ("USDT", "CARDGEL", None, "GEL Card"),
-    "usdt_to_aed_card": ("USDT", "CARDAED", None, "AED Card"),
+    "usdt_to_amd_card": ("USDTTRC20", "CARDAMD", None, "AMD Card"),
+    "usdt_to_rub_card": ("USDTTRC20", "CARDRUB", None, "RUB Card"),
+    "usdt_to_kzt_card": ("USDTTRC20", "CARDKZT", None, "KZT Card"),
+    "usdt_to_gel_card": ("USDTTRC20", "CARDGEL", None, "GEL Card"),
+    "usdt_to_aed_card": ("USDTTRC20", "CARDAED", None, "AED Card"),
 
     # ═══ CASH → USDT ═══
-    "amd_evn_to_usdt": ("CASHAMDEVN", "USDT", None, "USDT"),
-    "usd_evn_to_usdt": ("CASHUSDEVN", "USDT", None, "USDT"),
-    "usd_la_to_usdt": ("CASHUSDLA", "USDT", None, "USDT"),
+    "amd_evn_to_usdt": ("CASHAMD", "USDTTRC20", None, "USDT"),
+    "usd_evn_to_usdt": ("CASHUSD", "USDTTRC20", None, "USDT"),
+    "usd_la_to_usdt": ("CASHUSD", "USDTTRC20", None, "USDT"),
 
-    # ═══ CARD → USDT ═══
-    "rub_card_to_usdt": ("CARDRUB", "USDT", None, "USDT"),
+    # ═══ CARD/BANK → USDT ═══
+    "rub_card_to_usdt": ("SBERRUB", "USDTTRC20", None, "USDT"),
 }
 
 

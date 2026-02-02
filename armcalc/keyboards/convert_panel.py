@@ -31,7 +31,7 @@ def get_convert_panel_keyboard(
     # ═══════════════════════════════════
     rows.append([
         InlineKeyboardButton(
-            text=f"💰 Amount: {state.amount:,.0f}",
+            text=f"💰 {state.amount:,.0f}",
             callback_data=ConvertPanelCallback(action="show_amount").pack()
         ),
         InlineKeyboardButton(
@@ -64,26 +64,19 @@ def get_convert_panel_keyboard(
     # ═══════════════════════════════════
     rows.append([
         InlineKeyboardButton(
-            text="━━━ USDT → Cash ━━━",
+            text="━━ USDT → Cash ━━",
             callback_data=ConvertPanelCallback(action="noop").pack()
         ),
     ])
 
     rows.append([
         InlineKeyboardButton(
-            text="🇦🇲 USD Yerevan",
+            text="💵 USD",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_usd_evn").pack()
         ),
         InlineKeyboardButton(
-            text="🇦🇲 AMD Yerevan",
+            text="💵 AMD",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_amd_evn").pack()
-        ),
-    ])
-
-    rows.append([
-        InlineKeyboardButton(
-            text="🇺🇸 USD Los Angeles",
-            callback_data=ConvertPanelCallback(action="pair", value="usdt_to_usd_la").pack()
         ),
     ])
 
@@ -92,33 +85,33 @@ def get_convert_panel_keyboard(
     # ═══════════════════════════════════
     rows.append([
         InlineKeyboardButton(
-            text="━━━ USDT → Card ━━━",
+            text="━━ USDT → Card ━━",
             callback_data=ConvertPanelCallback(action="noop").pack()
         ),
     ])
 
     rows.append([
         InlineKeyboardButton(
-            text="🇦🇲 AMD",
+            text="💳 AMD",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_amd_card").pack()
         ),
         InlineKeyboardButton(
-            text="🇷🇺 RUB",
+            text="💳 RUB",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_rub_card").pack()
         ),
     ])
 
     rows.append([
         InlineKeyboardButton(
-            text="🇰🇿 KZT",
+            text="💳 KZT",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_kzt_card").pack()
         ),
         InlineKeyboardButton(
-            text="🇬🇪 GEL",
+            text="💳 GEL",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_gel_card").pack()
         ),
         InlineKeyboardButton(
-            text="🇦🇪 AED",
+            text="💳 AED",
             callback_data=ConvertPanelCallback(action="pair", value="usdt_to_aed_card").pack()
         ),
     ])
@@ -128,42 +121,35 @@ def get_convert_panel_keyboard(
     # ═══════════════════════════════════
     rows.append([
         InlineKeyboardButton(
-            text="━━━ Cash → USDT ━━━",
+            text="━━ Cash → USDT ━━",
             callback_data=ConvertPanelCallback(action="noop").pack()
         ),
     ])
 
     rows.append([
         InlineKeyboardButton(
-            text="🇦🇲 AMD Yerevan",
+            text="💵 AMD → USDT",
             callback_data=ConvertPanelCallback(action="pair", value="amd_evn_to_usdt").pack()
         ),
         InlineKeyboardButton(
-            text="🇦🇲 USD Yerevan",
+            text="💵 USD → USDT",
             callback_data=ConvertPanelCallback(action="pair", value="usd_evn_to_usdt").pack()
         ),
     ])
 
-    rows.append([
-        InlineKeyboardButton(
-            text="🇺🇸 USD Los Angeles",
-            callback_data=ConvertPanelCallback(action="pair", value="usd_la_to_usdt").pack()
-        ),
-    ])
-
     # ═══════════════════════════════════
-    # CARD → USDT
+    # BANK → USDT
     # ═══════════════════════════════════
     rows.append([
         InlineKeyboardButton(
-            text="━━━ Card → USDT ━━━",
+            text="━━ Bank → USDT ━━",
             callback_data=ConvertPanelCallback(action="noop").pack()
         ),
     ])
 
     rows.append([
         InlineKeyboardButton(
-            text="🇷🇺 RUB",
+            text="🏦 RUB Sber → USDT",
             callback_data=ConvertPanelCallback(action="pair", value="rub_card_to_usdt").pack()
         ),
     ])
@@ -184,7 +170,7 @@ def render_panel_text(
     availability: Optional[AvailabilityResult] = None,
 ) -> str:
     """Render panel text."""
-    lines = ["💱 <b>Currency Exchange</b>"]
+    lines = ["💱 <b>Exchange</b>"]
 
     if state.last_result:
         lines.append("")
