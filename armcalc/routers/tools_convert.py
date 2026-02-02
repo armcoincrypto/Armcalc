@@ -832,16 +832,22 @@ async def cmd_rates(message: Message) -> None:
 # Convert Panel Callback Handlers
 # =============================================================================
 
-# Pair ID to XML lookup mapping
+# Pair ID to XML lookup mapping: (from_code, to_code, method, display_name)
 PAIR_MAPPINGS = {
-    "usdt_usd_cash_yerevan": ("USDT", "CASHUSD", None, "USD Cash Yerevan"),
-    "usdt_amd_cash_yerevan": ("USDT", "CASHAMD", None, "AMD Cash Yerevan"),
-    "usdt_usd_cash_la": ("USDT", "CASHUSD", None, "USD Cash LA"),  # Same rate, different location
-    "usdt_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
-    "usdt_rub_card": ("USDT", "RUB", "sberbank", "RUB Card"),
-    "usdt_kzt_card": ("USDT", "KZT", None, "KZT Card"),
-    "usdt_gel_card": ("USDT", "GEL", None, "GEL Card"),
-    "usdt_aed_card": ("USDT", "AED", None, "AED Card"),
+    # ═══ SELL USDT (USDT → ...) ═══
+    "usdt_to_usd_cash": ("USDT", "CASHUSD", None, "USD Cash"),
+    "usdt_to_amd_cash": ("USDT", "CASHAMD", None, "AMD Cash"),
+    "usdt_to_usd_la": ("USDT", "CASHUSD", None, "USD Cash LA"),
+    "usdt_to_amd_card": ("USDT", "CARDAMD", None, "AMD Card"),
+    "usdt_to_rub_card": ("USDT", "RUB", "sberbank", "RUB Card"),
+    "usdt_to_kzt_card": ("USDT", "KZT", None, "KZT Card"),
+    "usdt_to_gel_card": ("USDT", "GEL", None, "GEL Card"),
+    "usdt_to_aed_card": ("USDT", "AED", None, "AED Card"),
+
+    # ═══ BUY USDT (... → USDT) ═══
+    "usd_cash_to_usdt": ("CASHUSD", "USDT", None, "USDT"),
+    "amd_cash_to_usdt": ("CASHAMD", "USDT", None, "USDT"),
+    "rub_to_usdt": ("RUB", "USDT", "sberbank", "USDT"),
 }
 
 
@@ -918,7 +924,10 @@ async def handle_convert_panel_callback(
 
         from_code, to_code, method, display_name = PAIR_MAPPINGS[pair_id]
 
-        await callback.answer(f"Converting to {display_name}...")
+        # Determine if this is "Sell USDT" or "Buy USDT"
+        is_sell_usdt = from_code == "USDT"
+
+        await callback.answer("Converting...")
 
         # Get rate and convert
         rate_quote = await xml_service.get_rate(from_code, to_code, method)
@@ -926,14 +935,22 @@ async def handle_convert_panel_callback(
         if rate_quote:
             result_amount = rate_quote.convert(state.amount)
 
-            # Format result
-            to_upper = rate_quote.to_code.upper()
-            if "AMD" in to_upper or "RUB" in to_upper or "KZT" in to_upper or "GEL" in to_upper or "AED" in to_upper:
-                result_str = f"{result_amount:,.0f} {display_name}"
+            # Format based on direction
+            if is_sell_usdt:
+                # Sell USDT: "100 USDT → 37,500 AMD Cash"
+                amount_str = f"{state.amount:,.0f} USDT"
+                to_upper = rate_quote.to_code.upper()
+                if "AMD" in to_upper or "RUB" in to_upper or "KZT" in to_upper or "GEL" in to_upper or "AED" in to_upper:
+                    result_str = f"{amount_str} → {result_amount:,.0f} {display_name}"
+                else:
+                    result_str = f"{amount_str} → {result_amount:,.2f} {display_name}"
+                rate_str = f"1 USDT = {rate_quote.rate:.2f} {display_name}"
             else:
-                result_str = f"{result_amount:,.2f} {display_name}"
-
-            rate_str = f"1 USDT = {rate_quote.rate:.2f} {to_code}"
+                # Buy USDT: "100 USD → 99.80 USDT"
+                from_display = from_code.replace("CASH", "").replace("CARD", " Card ")
+                amount_str = f"{state.amount:,.0f} {from_display}"
+                result_str = f"{amount_str} → {result_amount:,.2f} USDT"
+                rate_str = f"1 {from_display} = {rate_quote.rate:.4f} USDT"
 
             state = set_result(state, result_str, rate_str)
             save_user_state(user_id, state)
@@ -942,7 +959,7 @@ async def handle_convert_panel_callback(
             history = get_history_store()
             history.add_entry(
                 user_id,
-                f"{state.amount} USDT -> {display_name}",
+                f"{amount_str} -> {display_name}",
                 result_str,
                 "convert",
             )
