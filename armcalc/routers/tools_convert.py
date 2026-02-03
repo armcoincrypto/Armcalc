@@ -959,7 +959,9 @@ async def handle_convert_panel_callback(
                 from_display = from_code.replace("CASH", "").replace("SBER", "Sber ")
                 amount_str = f"{state.amount:,.0f} {from_display}"
                 result_str = f"{amount_str} → {result_amount:,.2f} USDT"
-                rate_str = f"{rate_quote.rate:.0f} {from_display} = 1 USDT"
+                # Show inverse rate: "401 AMD = 1 USDT" (not "0.0025 USDT = 1 AMD")
+                inverse_rate = 1 / rate_quote.rate if rate_quote.rate > 0 else 0
+                rate_str = f"{inverse_rate:.0f} {from_display} = 1 USDT"
 
             state = set_result(state, result_str, rate_str)
             save_user_state(user_id, state)
