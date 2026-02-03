@@ -792,16 +792,26 @@ async def cmd_rates(message: Message) -> None:
     # Send typing indicator
     await message.bot.send_chat_action(message.chat.id, "typing")
 
-    lines = ["📊 <b>Exchange Rates</b>\n"]
+    lines = ["📊 <b>Exchange Rates</b> (Yerevan)\n"]
 
-    # USDT <-> AMD
-    lines.append("<b>USDT ↔ AMD</b>")
-    rate = await xml_service.get_rate("USDT", "AMD")
+    # USDT <-> AMD (Cash, Yerevan)
+    lines.append("<b>USDT ↔ AMD Cash</b>")
+    rate = await xml_service.get_rate("USDTTRC20", "CASHAMD", None, "ERVN")
     if rate:
-        lines.append(f"  Buy AMD: 1 USDT = {rate.rate:.2f} AMD")
-    rate = await xml_service.get_rate("AMD", "USDT")
+        lines.append(f"  Sell USDT: 1 USDT = {rate.rate:.2f} AMD")
+    rate = await xml_service.get_rate("CASHAMD", "USDTTRC20", None, "ERVN")
     if rate:
-        lines.append(f"  Sell AMD: {1/rate.rate:.2f} AMD = 1 USDT")
+        lines.append(f"  Buy USDT: {1/rate.rate:.0f} AMD = 1 USDT")
+
+    # USDT <-> AMD Card
+    lines.append("")
+    lines.append("<b>USDT ↔ AMD Card</b>")
+    rate = await xml_service.get_rate("USDTTRC20", "CARDAMD", None, None)
+    if rate:
+        lines.append(f"  Sell USDT: 1 USDT = {rate.rate:.2f} AMD")
+    rate = await xml_service.get_rate("CARDAMD", "USDTTRC20", None, None)
+    if rate:
+        lines.append(f"  Buy USDT: {1/rate.rate:.0f} AMD = 1 USDT")
 
     lines.append("")
 

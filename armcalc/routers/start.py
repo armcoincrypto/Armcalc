@@ -10,26 +10,35 @@ logger = get_logger("start")
 router = Router(name="start")
 
 START_TEXT = """
-Barev! 🤖 I'm <b>Armcalc</b>
+Barev! 🤖 I'm <b>Armcalc</b> — calculator + exchange rates bot.
 
-<b>🧮 Calculator</b>
-Just type math: <code>2+2</code>, <code>sqrt(16)</code>, <code>100+10%</code>
+<b>━━━ 🧮 CALCULATOR ━━━</b>
+Type any math expression:
+• <code>2+2</code> • <code>100*5</code> • <code>sqrt(144)</code>
+• <code>100+10%</code> • <code>sin(45)</code> • <code>2^10</code>
 
-<b>💱 Currency</b>
-/convert 100 usdt amd
-/convert 100 usdt sberbank rub
-/pairs - See available options
+<b>━━━ 💱 EXCHANGE ━━━</b>
+/convert — Interactive panel (recommended)
+/convert 100 usdt amd — Quick convert
+/rates — Current exchange rates
+/pairs — Available networks/methods
 
-<i>Defaults: USDT=TRC20, AMD=Cash, RUB=Sberbank</i>
+<i>Defaults: USDT TRC20, AMD Cash, RUB Sberbank</i>
 
-<b>📊 Rates</b>
-/rates - Current exchange rates
+<b>━━━ 💰 CRYPTO ━━━</b>
+/price btc — Bitcoin price
+/price eth — Ethereum price
 
-<b>💰 Crypto</b>
-/price btc, /price eth
-
-<b>📋 Other</b>
-/history, /keyboard, /help
+<b>━━━ 📋 ALL COMMANDS ━━━</b>
+/start — This message
+/help — Detailed help
+/convert — Exchange panel
+/rates — Exchange rates
+/pairs — Available options
+/price — Crypto prices
+/keyboard — Calculator buttons
+/history — Your history
+/debug — Bot status
 """
 
 
