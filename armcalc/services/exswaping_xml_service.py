@@ -62,6 +62,7 @@ class ExchangeDirection:
     method: Optional[str] = None  # Payment method for RUB (sberbank, tinkoff, etc.)
     min_amount: Optional[Decimal] = None
     max_amount: Optional[Decimal] = None
+    city: Optional[str] = None  # City code (ERVN, LOSAN, etc.)
 
     @property
     def rate(self) -> Decimal:
@@ -305,6 +306,9 @@ class ExswapingXmlService:
                     method = m
                     break
 
+        # Parse city (for location-specific rates like CASHUSD)
+        city = self._get_text(item, ["city", "location", "place"])
+
         return ExchangeDirection(
             from_code=from_code.upper(),
             to_code=to_code.upper(),
@@ -315,6 +319,7 @@ class ExswapingXmlService:
             method=method,
             min_amount=min_amount,
             max_amount=max_amount,
+            city=city.upper() if city else None,
         )
 
     def _get_text(self, element: ET.Element, tag_options: List[str]) -> Optional[str]:
@@ -334,13 +339,18 @@ class ExswapingXmlService:
         """Build lookup index from cached directions."""
         self._direction_index.clear()
         for d in self._cache.directions:
-            # Index by exact codes
-            key = (d.from_code, d.to_code, d.method)
+            # Index by exact codes with city
+            key = (d.from_code, d.to_code, d.method, d.city)
             self._direction_index[key] = d
+
+            # Also index without city (first match wins for backwards compat)
+            key_no_city = (d.from_code, d.to_code, d.method, None)
+            if key_no_city not in self._direction_index:
+                self._direction_index[key_no_city] = d
 
             # Also index by normalized to_code for RUB
             if d.normalized_to_code != d.to_code:
-                key_norm = (d.from_code, d.normalized_to_code, d.method)
+                key_norm = (d.from_code, d.normalized_to_code, d.method, d.city)
                 if key_norm not in self._direction_index:
                     self._direction_index[key_norm] = d
 
@@ -539,6 +549,7 @@ class ExswapingXmlService:
         from_code: str,
         to_code: str,
         method: Optional[str] = None,
+        city: Optional[str] = None,
     ) -> Optional[RateQuote]:
         """
         Get exchange rate for a currency pair.
@@ -550,6 +561,7 @@ class ExswapingXmlService:
             from_code: Source currency (e.g., "USDT", "AMD", "usdttrc20")
             to_code: Target currency (e.g., "AMD", "RUB", "cashamd")
             method: Optional payment method for RUB (e.g., "sberbank")
+            city: Optional city code for location-specific rates (e.g., "ERVN", "LOSAN")
 
         Returns:
             RateQuote if found, None otherwise
@@ -560,6 +572,7 @@ class ExswapingXmlService:
         from_norm = self.normalize_code(from_code)
         to_norm = self.normalize_code(to_code)
         norm_method = self.normalize_method(method)
+        norm_city = city.upper() if city else None
 
         # Get all possible variants to try
         from_variants = CODE_ALIASES.get(from_code.upper(), [from_norm])
@@ -574,8 +587,24 @@ class ExswapingXmlService:
         # Try all combinations of from/to variants
         for from_var in from_variants:
             for to_var in to_variants:
-                # Try with method
-                key = (from_var, to_var, norm_method)
+                # Try with city first (if specified)
+                if norm_city:
+                    key = (from_var, to_var, norm_method, norm_city)
+                    if key in self._direction_index:
+                        d = self._direction_index[key]
+                        return RateQuote(
+                            from_code=from_var,
+                            to_code=to_var,
+                            rate=d.rate,
+                            method=d.method or norm_method,
+                            source="xml",
+                            timestamp=time.time(),
+                            from_display=self.get_display_name(from_var),
+                            to_display=self.get_display_name(to_var, d.method or norm_method),
+                        )
+
+                # Try with method (no city)
+                key = (from_var, to_var, norm_method, None)
                 if key in self._direction_index:
                     d = self._direction_index[key]
                     return RateQuote(
@@ -590,7 +619,7 @@ class ExswapingXmlService:
                     )
 
                 # Try without method
-                key = (from_var, to_var, None)
+                key = (from_var, to_var, None, None)
                 if key in self._direction_index:
                     d = self._direction_index[key]
                     return RateQuote(

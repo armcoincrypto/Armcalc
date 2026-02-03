@@ -832,28 +832,29 @@ async def cmd_rates(message: Message) -> None:
 # Convert Panel Callback Handlers
 # =============================================================================
 
-# Pair ID to XML lookup mapping: (from_code, to_code, method, display_name)
+# Pair ID to XML lookup mapping: (from_code, to_code, method, display_name, city)
 # Actual codes from exswaping.com XML
+# City codes: ERVN = Yerevan, LOSAN = Los Angeles
 PAIR_MAPPINGS = {
     # ═══ USDT → CASH ═══
-    "usdt_to_usd_evn": ("USDTTRC20", "CASHUSD", None, "USD Cash"),
-    "usdt_to_amd_evn": ("USDTTRC20", "CASHAMD", None, "AMD Cash"),
-    "usdt_to_usd_la": ("USDTTRC20", "CASHUSD", None, "USD Cash"),
+    "usdt_to_usd_evn": ("USDTTRC20", "CASHUSD", None, "USD Cash", "ERVN"),
+    "usdt_to_amd_evn": ("USDTTRC20", "CASHAMD", None, "AMD Cash", "ERVN"),
+    "usdt_to_usd_la": ("USDTTRC20", "CASHUSD", None, "USD Cash", "LOSAN"),
 
     # ═══ USDT → CARD ═══
-    "usdt_to_amd_card": ("USDTTRC20", "CARDAMD", None, "AMD Card"),
-    "usdt_to_rub_card": ("USDTTRC20", "CARDRUB", None, "RUB Card"),
-    "usdt_to_kzt_card": ("USDTTRC20", "CARDKZT", None, "KZT Card"),
-    "usdt_to_gel_card": ("USDTTRC20", "CARDGEL", None, "GEL Card"),
-    "usdt_to_aed_card": ("USDTTRC20", "CARDAED", None, "AED Card"),
+    "usdt_to_amd_card": ("USDTTRC20", "CARDAMD", None, "AMD Card", None),
+    "usdt_to_rub_card": ("USDTTRC20", "CARDRUB", None, "RUB Card", None),
+    "usdt_to_kzt_card": ("USDTTRC20", "CARDKZT", None, "KZT Card", None),
+    "usdt_to_gel_card": ("USDTTRC20", "CARDGEL", None, "GEL Card", None),
+    "usdt_to_aed_card": ("USDTTRC20", "CARDAED", None, "AED Card", None),
 
     # ═══ CASH → USDT ═══
-    "amd_evn_to_usdt": ("CASHAMD", "USDTTRC20", None, "USDT"),
-    "usd_evn_to_usdt": ("CASHUSD", "USDTTRC20", None, "USDT"),
-    "usd_la_to_usdt": ("CASHUSD", "USDTTRC20", None, "USDT"),
+    "amd_evn_to_usdt": ("CASHAMD", "USDTTRC20", None, "USDT", "ERVN"),
+    "usd_evn_to_usdt": ("CASHUSD", "USDTTRC20", None, "USDT", "ERVN"),
+    "usd_la_to_usdt": ("CASHUSD", "USDTTRC20", None, "USDT", "LOSAN"),
 
     # ═══ CARD/BANK → USDT ═══
-    "rub_card_to_usdt": ("SBERRUB", "USDTTRC20", None, "USDT"),
+    "rub_card_to_usdt": ("SBERRUB", "USDTTRC20", None, "USDT", None),
 }
 
 
@@ -928,7 +929,7 @@ async def handle_convert_panel_callback(
             await callback.answer("Unknown pair", show_alert=True)
             return
 
-        from_code, to_code, method, display_name = PAIR_MAPPINGS[pair_id]
+        from_code, to_code, method, display_name, city = PAIR_MAPPINGS[pair_id]
 
         # Determine if this is "Sell USDT" or "Buy USDT"
         # Check if from_code starts with USDT (covers USDTTRC20, USDTERC20, etc.)
@@ -936,8 +937,8 @@ async def handle_convert_panel_callback(
 
         await callback.answer("Converting...")
 
-        # Get rate and convert
-        rate_quote = await xml_service.get_rate(from_code, to_code, method)
+        # Get rate and convert (pass city for location-specific rates)
+        rate_quote = await xml_service.get_rate(from_code, to_code, method, city)
 
         if rate_quote:
             result_amount = rate_quote.convert(state.amount)
