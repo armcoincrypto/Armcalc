@@ -3,7 +3,7 @@
 from decimal import Decimal
 from typing import Dict, Optional, Tuple
 
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 
@@ -1026,7 +1026,7 @@ def _looks_like_number(text: str) -> bool:
         return False
 
 
-@router.message()
+@router.message(F.text & ~F.text.startswith("/"))
 async def handle_convert_amount_input(message: Message) -> None:
     """
     Handle numeric input when user has active convert panel.
