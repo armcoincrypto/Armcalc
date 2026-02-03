@@ -870,7 +870,10 @@ async def handle_convert_panel_callback(
 
     logger.debug(f"Convert panel: user={user_id}, action={action}, value={value}")
 
-    state = get_user_state(user_id)
+    state, was_expired = get_user_state(user_id, return_was_expired=True)
+    panel_refreshed_note = ""
+    if was_expired:
+        panel_refreshed_note = "\n\n<i>ℹ️ Panel refreshed (was inactive)</i>"
 
     # Get XML service
     xml_service = get_xml_service()
@@ -901,7 +904,7 @@ async def handle_convert_panel_callback(
         # Update panel
         try:
             await callback.message.edit_text(
-                render_panel_text(state, None),
+                render_panel_text(state, None) + panel_refreshed_note,
                 reply_markup=get_convert_panel_keyboard(state, None),
                 parse_mode="HTML",
             )
@@ -914,7 +917,7 @@ async def handle_convert_panel_callback(
         await callback.answer("Type amount in chat", show_alert=False)
         try:
             await callback.message.edit_text(
-                render_panel_text(state, None) + "\n\n✏️ <i>Type amount in chat...</i>",
+                render_panel_text(state, None) + "\n\n✏️ <i>Type amount in chat...</i>" + panel_refreshed_note,
                 reply_markup=get_convert_panel_keyboard(state, None),
                 parse_mode="HTML",
             )
@@ -975,13 +978,13 @@ async def handle_convert_panel_callback(
                 "convert",
             )
         else:
-            state = set_result(state, f"{display_name} - not available", "")
+            state = set_result(state, f"{display_name} - not available", "Try: /pairs usdt")
             save_user_state(user_id, state)
 
         # Update panel with result
         try:
             await callback.message.edit_text(
-                render_panel_text(state, None),
+                render_panel_text(state, None) + panel_refreshed_note,
                 reply_markup=get_convert_panel_keyboard(state, None),
                 parse_mode="HTML",
             )

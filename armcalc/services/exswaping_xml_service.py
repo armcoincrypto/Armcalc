@@ -193,6 +193,14 @@ class ExswapingXmlService:
         self._session: Optional[aiohttp.ClientSession] = None
         # Index for fast lookups: (from_code, to_code, method) -> direction
         self._direction_index: Dict[Tuple[str, str, Optional[str]], ExchangeDirection] = {}
+        # Lock to prevent concurrent refresh storms
+        self._refresh_lock: Optional[asyncio.Lock] = None
+
+    def _get_refresh_lock(self) -> asyncio.Lock:
+        """Get or create refresh lock (lazy init for event loop safety)."""
+        if self._refresh_lock is None:
+            self._refresh_lock = asyncio.Lock()
+        return self._refresh_lock
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -479,9 +487,13 @@ class ExswapingXmlService:
         return False
 
     async def ensure_cache(self) -> None:
-        """Ensure cache is populated and valid."""
-        if not self._is_cache_valid():
-            await self.refresh_cache()
+        """Ensure cache is populated and valid (with lock to prevent storms)."""
+        if self._is_cache_valid():
+            return
+        async with self._get_refresh_lock():
+            # Double-check after acquiring lock
+            if not self._is_cache_valid():
+                await self.refresh_cache()
 
     def normalize_method(self, method: Optional[str]) -> Optional[str]:
         """Normalize a payment method alias to canonical form."""

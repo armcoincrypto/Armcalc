@@ -58,9 +58,11 @@ async def on_shutdown(bot: Bot) -> None:
     # Close service sessions
     from armcalc.services.price_service import get_price_service
     from armcalc.services.fx_service import get_fx_service
+    from armcalc.services.exswaping_xml_service import get_xml_service
 
     await get_price_service().close()
     await get_fx_service().close()
+    await get_xml_service().close()
 
     logger.info("Bot shutdown complete")
 

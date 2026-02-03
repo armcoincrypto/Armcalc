@@ -242,14 +242,33 @@ def involves_rub(state: ConvertState) -> bool:
 
 # Global state storage with TTL cleanup
 _user_states: Dict[int, ConvertState] = {}
+_access_counter: int = 0
+_CLEANUP_INTERVAL: int = 50  # Cleanup every N accesses
 
 
-def get_user_state(user_id: int) -> ConvertState:
-    """Get or create user state."""
+def get_user_state(user_id: int, return_was_expired: bool = False):
+    """
+    Get or create user state.
+
+    If return_was_expired=True, returns (state, was_expired) tuple.
+    """
+    global _access_counter
+    _access_counter += 1
+
+    # Periodic cleanup to prevent memory growth
+    if _access_counter >= _CLEANUP_INTERVAL:
+        _access_counter = 0
+        cleanup_expired_states()
+
     state = _user_states.get(user_id)
-    if state is None or state.is_expired():
+    was_expired = state is not None and state.is_expired()
+
+    if state is None or was_expired:
         state = create_state()
         _user_states[user_id] = state
+
+    if return_was_expired:
+        return state, was_expired
     return state
 
 
